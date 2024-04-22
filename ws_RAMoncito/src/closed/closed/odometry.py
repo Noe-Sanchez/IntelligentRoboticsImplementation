@@ -24,7 +24,7 @@ class Odometry(Node):
         self.wR_subscriber = self.create_subscription(Float32, 'VelocityEncR', self.wR_callback, qos_profile=qos_profile_sub) # wR topic subscriber
 
         # Odometry publisher
-        self.odom_publisher = self.create_publisher(Pose2D, 'odom', 10) # odometry topic publisher
+        self.odom_publisher = self.create_publisher(Pose2D, 'odom', qos_profile=qos_profile_sub) # odometry topic publisher
         self.odom_period = 0.05 # odometry publishing period (seconds)
         self.odom_timer = self.create_timer(self.odom_period, self.odom_callback) # odometry publishing timer
         self.msg_odom = Pose2D() # odometry message

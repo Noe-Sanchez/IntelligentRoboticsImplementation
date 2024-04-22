@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'odometry = closed.odometry:main'
+            'controller = closed.controller:main'
         ],
     },
 )
