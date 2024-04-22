@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'odometry = closed.odometry:main'
+            'odometry = closed.odometry:main',
             'controller = closed.controller:main'
         ],
     },
