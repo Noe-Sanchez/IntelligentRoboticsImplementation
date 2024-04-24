@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'open_loop = open.open_loop:main'
+            'open_loop = open.open_loop:main',
+            'pose_gen  = open.pose_gen:main'
         ],
     },
 )
