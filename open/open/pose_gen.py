@@ -46,7 +46,7 @@ class PoseGenerator(Node):
     def flag_callback(self, msg):
         self.desired_trajectory = msg.data
 
-        if(self.desired_trajectory > 0 and self.desired_trajectory < 3):
+        if(self.desired_trajectory > 0 and self.desired_trajectory < 4):
             traj = 'trajectory' + str(self.desired_trajectory)
             self.poses = PoseArray()
 
