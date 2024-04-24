@@ -3,6 +3,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from geometry_msgs.msg import Twist, Pose2D
 import numpy as np
+import math
 
 # Odometry node
 class Controller(Node):
@@ -44,8 +45,8 @@ class Controller(Node):
         self.msg_vel.angular.z = 0.0
         
         # Robot constants
-        self.Kv = 0.5 # proportional linear velocity constant
-        self.Kw = 0.5 # proportional angular velocity constant
+        self.Kv = 0.25 # proportional linear velocity constant
+        self.Kw = 0.25 # proportional angular velocity constant
 
         # Robot pose variables
         self.theta = 0.0
@@ -69,6 +70,12 @@ class Controller(Node):
         # Points
         self.puntos = [[0,0], [0.6,0], [0.6,0.6], [0,0.6]]
 
+        self.xT = self.puntos[self.count][0]
+        self.yT = self.puntos[self.count][1]
+
+        self.TARGET_TOLERANCE = 0.02
+
+
         # Max & min velocities
         self.maxang = 1.25
         self.maxlinear = 0.3
@@ -77,22 +84,64 @@ class Controller(Node):
 
     def getVelocity(self):
 
-        # After one part of the trajectory is ready, update points
-        if self.vfinish and self.afinish:
-            self.distance = 0
-            self.vfinish = False
-            self.afinish = False
-            if self.count < len(self.puntos) - 1: 
-                self.xT = self.puntos[self.count+1][0]
-                self.yT = self.puntos[self.count+1][1]
-                self.count +=1
-            else:
-                self.count = 0
-                self.xT = self.puntos[self.count][0]
-                self.yT = self.puntos[self.count][1]
-                #self.finish = True
+        # # After one part of the trajectory is ready, update points
+        # if self.vfinish and self.afinish:
+        #     self.distance = 0
+        #     self.vfinish = False
+        #     self.afinish = False
+        #     if self.count < len(self.puntos) - 1: 
+        #         self.xT = self.puntos[self.count+1][0]
+        #         self.yT = self.puntos[self.count+1][1]
+        #         self.count +=1
+        #     else:
+        #         self.count = 0
+        #         self.xT = self.puntos[self.count][0]
+        #         self.yT = self.puntos[self.count][1]
+        #         #self.finish = True
             
-        # Obtain distance and angle between points
+        # # Obtain distance and angle between points
+        # deltay = self.yT - self.y
+        # deltax = self.xT - self.x
+        # self.error_d = np.sqrt((deltax)**2 + (deltay)**2)
+        # self.thetaT = np.arctan2(deltay, deltax)
+        # errorDer = 0
+    
+        # #Obtain angular error and its complementary error, and see which is the lowest
+        # errorIzq = self.thetaT - self.theta
+        # if(errorIzq < 0): errorDer = errorIzq + 2*np.pi
+        # elif(errorIzq > 0): errorDer = errorIzq - 2*np.pi
+
+        # if(abs(errorIzq) < abs(errorDer)): self.error_ang = errorIzq
+        # else: self.error_ang = errorDer
+        
+        # #First, let robot turn until self.error_ang is diminutive
+        # if (abs(self.error_ang) >= 0.05):
+        #     self.w = self.Kw * self.error_ang
+        # else:
+        #     self.w = 0.0
+        #     self.afinish = True
+
+        # #If robot turn is finish, let robot have linear velocity
+        # if self.afinish:
+        #     if self.error_d > 0.05 : 
+        #         self.v = self.Kv * self.error_d
+        #     else: 
+        #         self.vfinish = True
+        # else:
+        #     self.v = 0.0
+
+        # #if self.finish:
+        # #    self.v = 0.0
+        # #    self.w = 0.0
+
+        target_distance = math.sqrt((self.x - self.xT)**2 + (self.y - self.yT)**2)
+        if target_distance < self.TARGET_TOLERANCE:
+            self.count+=1
+            if self.count >= len(self.puntos):
+                self.count=0
+            self.xT = self.puntos[self.count][0]
+            self.yT = self.puntos[self.count][1]
+        
         deltay = self.yT - self.y
         deltax = self.xT - self.x
         self.error_d = np.sqrt((deltax)**2 + (deltay)**2)
@@ -106,28 +155,17 @@ class Controller(Node):
 
         if(abs(errorIzq) < abs(errorDer)): self.error_ang = errorIzq
         else: self.error_ang = errorDer
-        
-        #First, let robot turn until self.error_ang is diminutive
-        if (self.error_ang <= -0.1 or self.error_ang >= 0.1):
+
+        if self.error_ang > 0.05:
             self.w = self.Kw * self.error_ang
-        else:
-            self.w = 0.0
-            self.afinish = True
-
-        #If robot turn is finish, let robot have linear velocity
-        if self.afinish:
-            if self.error_d > 0.2 : 
-                self.v = self.Kv * self.error_d
-            else: 
-                self.vfinish = True
-        else:
             self.v = 0.0
+        else:
+            self.v = self.Kv * target_distance
+            self.w = 0.0
 
-        #if self.finish:
-        #    self.v = 0.0
-        #    self.w = 0.0
 
-        #Publish velocities
+
+        # #Publish velocities
         
         
         
@@ -151,13 +189,15 @@ class Controller(Node):
         self.getVelocity()
         self.vel_publisher.publish(self.msg_vel)
         
-        self.get_logger().info('Velocities: {}'.format(self.msg_vel))
-        self.get_logger().info('Distance: {}'.format(self.distance))
-        self.get_logger().info('Angle: {}'.format(self.theta))
+
+        
+        # self.get_logger().info('Velocities: {}'.format(self.msg_vel))
+        # self.get_logger().info('Distance: {}'.format(self.distance))
+        # self.get_logger().info('Angle: {}'.format(self.theta))
         self.get_logger().info('Punto: {}'.format(self.puntos[self.count]))
-        self.get_logger().info('theta: {}'.format(self.thetaT))
-        self.get_logger().info('error_d: {}'.format(self.error_d))
-        self.get_logger().info('error_a: {}'.format(self.error_ang))
+        # self.get_logger().info('theta: {}'.format(self.thetaT))
+        # self.get_logger().info('error_d: {}'.format(self.error_d))
+        # self.get_logger().info('error_a: {}'.format(self.error_ang))
 
     # Update left motor angular velocity
     def odom_callback(self, msg):

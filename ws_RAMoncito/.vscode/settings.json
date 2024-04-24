@@ -1,0 +1,18 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/fsp/school/IntelligentRoboticsImplementation/ws_RAMoncito/build/open",
+        "/home/fsp/school/IntelligentRoboticsImplementation/ws_RAMoncito/install/open/lib/python3.10/site-packages",
+        "/home/fsp/school/IntelligentRoboticsImplementation/ws_RAMoncito/build/closed",
+        "/home/fsp/school/IntelligentRoboticsImplementation/ws_RAMoncito/install/closed/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/fsp/school/IntelligentRoboticsImplementation/ws_RAMoncito/build/open",
+        "/home/fsp/school/IntelligentRoboticsImplementation/ws_RAMoncito/install/open/lib/python3.10/site-packages",
+        "/home/fsp/school/IntelligentRoboticsImplementation/ws_RAMoncito/build/closed",
+        "/home/fsp/school/IntelligentRoboticsImplementation/ws_RAMoncito/install/closed/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
+}
