@@ -58,11 +58,13 @@ public:
         RCLCPP_INFO(this->get_logger(), "MPU node started");
         imu_pub = this->create_publisher<sensor_msgs::msg::Imu>("mpu6050/data", 10);
         yaw_pub = this->create_publisher<std_msgs::msg::Float64>("mpu6050/yaw", 10);
+        filtered_yaw_pub = this->create_publisher<std_msgs::msg::Float64>("mpu6050/filtered_yaw", 10);
+        moving_average_yaw_pub = this->create_publisher<std_msgs::msg::Float64>("mpu6050/moving_average_yaw", 10);
         rclcpp::WallRate loop_rate(100);
         start_imu();
         RCLCPP_INFO(this->get_logger(), "MPU6050 node running...");
         start = this->get_clock()->now().seconds() * 1000;
-        imu_timer = this->create_wall_timer(std::chrono::milliseconds(10), std::bind(&MPU6050::imu_callback, this));
+        imu_timer = this->create_wall_timer(std::chrono::milliseconds(100), std::bind(&MPU6050::imu_callback, this));
     }
 
     void start_imu() {
@@ -266,28 +268,6 @@ public:
         omgY = (rawYomg / GYRO_SENSITIVITY_FACTOR) - gyroYOffset;
         omgZ = (rawZomg / GYRO_SENSITIVITY_FACTOR) - gyroZOffset;
 
-        // Moving average filter
-        if(omgXQueue.size() >= MOVING_AVERAGE_WINDOW) {
-            omgXQueue.pop();
-            omgYQueue.pop();
-            omgZQueue.pop();
-        }
-        omgXQueue.push(omgX);
-        omgYQueue.push(omgY);
-        omgZQueue.push(omgZ);
-
-        omgX = 0; omgY = 0; omgZ = 0;
-
-        for(int i=0; i<omgXQueue.size(); i++) {
-            omgX += omgXQueue.front();
-            omgY += omgYQueue.front();
-            omgZ += omgZQueue.front();
-        }
-
-        omgX /= omgXQueue.size();
-        omgY /= omgYQueue.size();
-        omgZ /= omgZQueue.size();
-
         // Calculating angle in degrees
         end = this->get_clock()->now().seconds() * 1000;
         dt = (end - start) / 1000;
@@ -297,6 +277,26 @@ public:
         angY = (GYRO_COEF * (angY + omgY * dt)) + (ACC_COEF * angAccY);
         angZ += omgZ * dt;
 
+        filtered_yaw_msg.data = filter(angZ);
+
+        // Moving average
+        angXQueue.push(angX);
+        angYQueue.push(angY);
+        angZQueue.push(angZ);
+        if (angXQueue.size() > MOVING_AVERAGE_WINDOW) {
+            sumX -= angXQueue.front();
+            sumY -= angYQueue.front();
+            sumZ -= angZQueue.front();
+            angXQueue.pop();
+            angYQueue.pop();
+            angZQueue.pop();
+        }
+        sumX += angX;
+        sumY += angY;
+        sumZ += angZ;
+
+        moving_average_yaw_msg.data = sumZ / angZQueue.size();
+        
         // Degree -> radians -> quaternians);
         q.setRPY(angX * (M_PI / 180), angY * (M_PI / 180), angZ * (M_PI / 180));
         tf2::convert(q, q_msg);
@@ -313,16 +313,34 @@ public:
         imu_data.angular_velocity.z = omgZ * (M_PI / 180);
         imu_pub->publish(imu_data);
 
-        yaw_data.data = angZ;
-        yaw_pub->publish(yaw_data);
+        yaw_msg.data = angZ;
+        yaw_pub->publish(yaw_msg);
+        filtered_yaw_pub->publish(filtered_yaw_msg);
+        moving_average_yaw_pub->publish(moving_average_yaw_msg);
 
         count++;
         start = end;
     }
 
+    float filter(float input) {
+        // Almacenar la muestra actual en el arreglo
+        samples[sampleIndex] = input;
+
+        // Incrementar el índice de muestra
+        sampleIndex = (sampleIndex + 1) % numSamples;
+
+        // Aplicar el filtro
+        float filteredValue = b0 * input + b1 * samples[(sampleIndex - 1 + numSamples) % numSamples] + b2 * samples[(sampleIndex - 2 + numSamples) % numSamples]
+                            - a1 * samples[(sampleIndex - 1 + numSamples) % numSamples] - a2 * samples[(sampleIndex - 2 + numSamples) % numSamples];
+
+        return filteredValue;
+    }
+
 private:
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr yaw_pub;
+    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr filtered_yaw_pub;
+    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr moving_average_yaw_pub;
     rclcpp::TimerBase::SharedPtr imu_timer;
     int file;
     const char *bus = "/dev/i2c-8";
@@ -330,7 +348,9 @@ private:
     tf2::Quaternion q;
     geometry_msgs::msg::Quaternion q_msg;
     sensor_msgs::msg::Imu imu_data;
-    std_msgs::msg::Float64 yaw_data;
+    std_msgs::msg::Float64 yaw_msg;
+    std_msgs::msg::Float64 filtered_yaw_msg;
+    std_msgs::msg::Float64 moving_average_yaw_msg;
     double start, end;
     float gyroXOffset,gyroYOffset,gyroZOffset,dt;
     float angAccX,angAccY,accx,accy,accz,omgx,omgy,omgz,qx=0,qy=0,qz=0,qw=0;
@@ -341,7 +361,20 @@ private:
     std::vector<float> mean;
     int16_t rawXacc,rawYacc,rawZacc,rawXomg,rawYomg,rawZomg;
     int count = 0;        
-    std::queue<float> omgXQueue, omgYQueue, omgZQueue;
+
+    std::queue<float> angXQueue, angYQueue, angZQueue;
+    float sumX = 0, sumY = 0, sumZ = 0;
+
+    const static int numSamples = 10; // Número de muestras para el filtro
+    int samples[numSamples]; // Arreglo para almacenar las muestras
+    int sampleIndex = 0; // Índice actual en el arreglo de muestras
+
+    // Coeficientes del filtro Butterworth (2º orden, fc = 0.1 Hz)
+    const float b0 = 0.02465375f;
+    const float b1 = 0.0493075f;
+    const float b2 = 0.02465375f;
+    const float a1 = -1.9873645f;
+    const float a2 = 0.98747212f;
 };
 
 int main(int argc, char **argv) {
