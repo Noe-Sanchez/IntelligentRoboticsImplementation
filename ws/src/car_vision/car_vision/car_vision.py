@@ -28,6 +28,10 @@ class Vision():
     def __init__(self):
         camera_number = 0
         self.cap = cv2.VideoCapture(camera_number)
+        self.camera_matrix = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+        self.distortion = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+        self.rvecs = None
+        self.tvecs = None
 
     def camera_thread(self):
         ret, self.frame = self.cap.read()
@@ -37,7 +41,7 @@ class Vision():
         # plt.ion()
         while True:
             ret, self.frame = self.cap.read()
-            
+
             if not ret:
                 print("Could not receive frame")
                 break
@@ -80,12 +84,12 @@ class Vision():
 
         circles_pts = {}
 
-        for detected_output, color in zip(detected_outputs, [DetectionEnumerator.RED_CIRCLE]): #, DetectionEnumerator.GREEN_CIRCLE, DetectionEnumerator.YELLOW_CIRCLE
+        for detected_output, color in zip(detected_outputs, [DetectionEnumerator.RED_CIRCLE, DetectionEnumerator.GREEN_CIRCLE, DetectionEnumerator.YELLOW_CIRCLE]): 
             if DEBUG:
                 cv2.imshow("Masked image " + str(color), detected_output)
                 # cv2.waitKey(0)
                 # cv2.destroyAllWindows()
-
+            circles_pts[color] = []
             gray = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
             blur = cv2.medianBlur(gray, 5)
             canny = cv2.Canny(blur, 75, 250)
@@ -107,6 +111,8 @@ class Vision():
                 area = cv2.contourArea(c)
                 if len(approx) > 5 and area > 1000 and area < 500000:
                     ((x, y), r) = cv2.minEnclosingCircle(c)
+                    #circle_pts.append((int(x), int(y), int(r)))
+                    circles_pts[color].append(r)
                     if color == DetectionEnumerator.RED_CIRCLE:
                         color_rgb = (0, 0, 255)
                     elif color == DetectionEnumerator.GREEN_CIRCLE:
@@ -132,7 +138,7 @@ class carVision(Node):
     def timer_callback(self):
         detection_msg = Detection()
         circle_pts = self.vision.getColoredCirles()
-        min_distance = float("inf")
+        min_distance = 254
         detected_color = DetectionEnumerator.NO_DETECTION
         # print(circle_pts)
         if len(circle_pts) > 0:
@@ -140,6 +146,7 @@ class carVision(Node):
                 if len(circle_pts[color_key]) < 1:
                     continue
                 
+                # if radius is used, then the distance is the radius and the maxium radius should be looked for
                 for distance in circle_pts[color_key]:
                     if min_distance > distance:
                         min_distance = distance
