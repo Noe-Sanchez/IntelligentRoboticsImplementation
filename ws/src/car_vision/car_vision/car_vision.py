@@ -3,7 +3,6 @@ import numpy as np
 import threading
 import pathlib
 from enum import IntEnum
-import matplotlib.pyplot as plt
 
 
 import rclpy
@@ -50,19 +49,24 @@ class Vision():
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-    
+        
+        self.cap.release()
+        cv2.destroyAllWindows()
+
+
     def getColoredCirles(self):
-        # color verde
-        lower_green = np.array([61, 67, 73])
-        upper_green = np.array([102, 255, 255])
+        # color verde using (hMin = 50 , sMin = 60, vMin = 40), (hMax = 90 , sMax = 255, vMax = 200)
+        lower_green = np.array([50, 60, 40])
+        upper_green = np.array([90, 255, 200])
 
-        # amarillo
-        lower_yellow = np.array([20, 100, 100])
-        upper_yellow = np.array([30, 255, 255])
 
-        #rojo
-        lower_red = np.array([136, 87, 111])
-        upper_red = np.array([180, 255, 255])
+        # amarillo usando (hMin = 19 , sMin = 155, vMin = 120), (hMax = 80 , sMax = 255, vMax = 255)
+        lower_yellow = np.array([19, 155, 120])
+        upper_yellow = np.array([80, 255, 255])
+
+        #rojo using hMin = 0 , sMin = 174, vMin = 108), (hMax = 6 , sMax = 255, vMax = 255)
+        lower_red = np.array([0, 174, 108])
+        upper_red = np.array([6, 255, 255])
 
         detected_outputs = []
         hsvFrame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
@@ -84,18 +88,19 @@ class Vision():
 
         circles_pts = {}
 
-        for detected_output, color in zip(detected_outputs, [DetectionEnumerator.RED_CIRCLE, DetectionEnumerator.GREEN_CIRCLE, DetectionEnumerator.YELLOW_CIRCLE]): 
+        for detected_output, color in zip(detected_outputs, [DetectionEnumerator.RED_CIRCLE, DetectionEnumerator.GREEN_CIRCLE, DetectionEnumerator.YELLOW_CIRCLE ]):
             if DEBUG:
                 cv2.imshow("Masked image " + str(color), detected_output)
                 # cv2.waitKey(0)
                 # cv2.destroyAllWindows()
             circles_pts[color] = []
             gray = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
-            blur = cv2.medianBlur(gray, 5)
+            # blur = cv2.gaussianBlur(gray, 5)
+            blur = cv2.GaussianBlur(gray,(9,9),2)
             canny = cv2.Canny(blur, 75, 250)
 
             if DEBUG:
-                cv2.imshow("Canny image " + str(color), canny)
+                cv2.imshow("Blur image " + str(color), blur)
 
             # Morph open 
             thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
@@ -139,6 +144,8 @@ class carVision(Node):
         detection_msg = Detection()
         circle_pts = self.vision.getColoredCirles()
         min_distance = 254
+        max_radius = -1
+        useRadius = True
         detected_color = DetectionEnumerator.NO_DETECTION
         # print(circle_pts)
         if len(circle_pts) > 0:
@@ -147,13 +154,22 @@ class carVision(Node):
                     continue
                 
                 # if radius is used, then the distance is the radius and the maxium radius should be looked for
-                for distance in circle_pts[color_key]:
-                    if min_distance > distance:
-                        min_distance = distance
-                        detected_color = color_key
+                if useRadius:
+                    for radius in circle_pts[color_key]:
+                        if max_radius < radius:
+                            max_radius = radius
+                            detected_color = color_key
+        
+                    detection_msg.distance = max_radius
+                else:
+                    for distance in circle_pts[color_key]:
+                        if min_distance > distance:
+                            min_distance = distance
+                            detected_color = color_key
+
+                    detection_msg.distance = min_distance
 
             detection_msg.detection_type = detected_color
-            detection_msg.distance = min_distance
 
         self.detection_publisher.publish(detection_msg)
 

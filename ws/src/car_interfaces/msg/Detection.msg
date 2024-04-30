@@ -4,4 +4,4 @@ uint8 YELLOW_CIRCLE = 2
 uint8 GREEN_CIRCLE = 3
 
 uint8 detection_type
-uint8 distance
+float32 distance
