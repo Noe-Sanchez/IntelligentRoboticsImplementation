@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'car_vision = car_vision.car_vision:main',
+            'thresholding = car_vision.thresholding:main',
         ],
     },
 )

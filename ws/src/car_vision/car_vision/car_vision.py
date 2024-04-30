@@ -7,66 +7,57 @@ from enum import IntEnum
 
 import rclpy
 from rclpy.node import Node
+from cv_bridge import CvBridge
 
 from car_interfaces.msg import Detection
 from std_msgs.msg import Float32
+from sensor_msgs.msg import Image
 
 
 DEBUG = False
 BASE_DIR = str(pathlib.Path(__file__).resolve().parent)
-
 
 class DetectionEnumerator(IntEnum):
     NO_DETECTION = 0
     RED_CIRCLE = 1
     YELLOW_CIRCLE = 2
     GREEN_CIRCLE = 3
-
-#Functions
-class Vision():
+      
+class carVision(Node):
     def __init__(self):
-        camera_number = 0
-        self.cap = cv2.VideoCapture(camera_number)
-        self.camera_matrix = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-        self.distortion = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
-        self.rvecs = None
-        self.tvecs = None
+        super().__init__("car_vision_publisher")
+        self.detection_publisher = self.create_publisher(Detection, '/carDetections', 10)
+        self.road_publisher = self.create_publisher(Float32, '/roadError', 10)
 
-    def camera_thread(self):
-        ret, self.frame = self.cap.read()
-        # self.im1 = self.ax1.imshow(self.frame)
-        # self.im2 = self.ax1.imshow(self.frame)
+        self.camera_publisher = self.create_publisher(Image, '/image_detections', 10)
+        self.camera_subcriber = self.create_subscription(Image, '/image_raw', self.camera_callback, 10)
 
-        # plt.ion()
-        while True:
-            ret, self.frame = self.cap.read()
-
-            if not ret:
-                print("Could not receive frame")
-                break
-
-            cv2.imshow('Original image', self.frame)
-
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+        time_interval = 0.1 # seconds
+        self.timer = self.create_timer(time_interval, self.timer_callback)
         
-        self.cap.release()
-        cv2.destroyAllWindows()
+        self.bridge = CvBridge()
+        self.frame = None
 
-
+    def camera_callback(self, msg):
+        try:
+            self.frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+        except Exception as e:
+            self.get_logger().info(str(e))
+    
     def getColoredCirles(self):
-        # color verde using (hMin = 50 , sMin = 60, vMin = 40), (hMax = 90 , sMax = 255, vMax = 200)
-        lower_green = np.array([50, 60, 40])
-        upper_green = np.array([90, 255, 200])
+        if self.frame is None:
+            return []
+         # color verde using (hMin = 50 , sMin = 30, vMin = 50), (hMax = 80 , sMax = 255, vMax = 255)
+        lower_green = np.array([50, 30, 50])
+        upper_green = np.array([80, 255, 255])
 
+        # amarillo usando (hMin = 20 , sMin = 120, vMin = 140), (hMax = 100 , sMax = 200, vMax = 255)
+        lower_yellow = np.array([20, 120, 140])
+        upper_yellow = np.array([100, 200, 255])
 
-        # amarillo usando (hMin = 19 , sMin = 155, vMin = 120), (hMax = 80 , sMax = 255, vMax = 255)
-        lower_yellow = np.array([19, 155, 120])
-        upper_yellow = np.array([80, 255, 255])
-
-        #rojo using hMin = 0 , sMin = 174, vMin = 108), (hMax = 6 , sMax = 255, vMax = 255)
-        lower_red = np.array([0, 174, 108])
-        upper_red = np.array([6, 255, 255])
+        #rojo using (hMin = 0 , sMin = 125, vMin = 90), (hMax = 5 , sMax = 255, vMax = 255)
+        lower_red = np.array([0, 125, 90])
+        upper_red = np.array([5, 255, 255])
 
         detected_outputs = []
         hsvFrame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
@@ -89,8 +80,8 @@ class Vision():
         circles_pts = {}
 
         for detected_output, color in zip(detected_outputs, [DetectionEnumerator.RED_CIRCLE, DetectionEnumerator.GREEN_CIRCLE, DetectionEnumerator.YELLOW_CIRCLE ]):
-            if DEBUG:
-                cv2.imshow("Masked image " + str(color), detected_output)
+            # if DEBUG:
+            #     cv2.imshow("Masked image " + str(color), detected_output)
                 # cv2.waitKey(0)
                 # cv2.destroyAllWindows()
             circles_pts[color] = []
@@ -99,8 +90,8 @@ class Vision():
             blur = cv2.GaussianBlur(gray,(9,9),2)
             canny = cv2.Canny(blur, 75, 250)
 
-            if DEBUG:
-                cv2.imshow("Blur image " + str(color), blur)
+            # if DEBUG:
+            #     cv2.imshow("Blur image " + str(color), blur)
 
             # Morph open 
             thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
@@ -127,22 +118,14 @@ class Vision():
                     
                     cv2.circle(self.frame, (int(x), int(y)), int(r), color_rgb, 2)
 
-            cv2.imshow('Detections', self.frame)
-        
+            # cv2.imshow('Detections', self.frame)
+            self.camera_publisher.publish(self.bridge.cv2_to_imgmsg(self.frame, "bgr8"))
+            print ("Publishing image")        
         return circles_pts
-        
-class carVision(Node):
-    def __init__(self, camera_vision):
-        super().__init__("car_vision_publisher")
-        self.detection_publisher = self.create_publisher(Detection, '/carDetections', 10)
-        self.road_publisher = self.create_publisher(Float32, '/roadError', 10)
-        time_interval = 0.1 # seconds
-        self.timer = self.create_timer(time_interval, self.timer_callback)
-        self.vision = camera_vision
 
     def timer_callback(self):
         detection_msg = Detection()
-        circle_pts = self.vision.getColoredCirles()
+        circle_pts = self.getColoredCirles()
         min_distance = 254
         max_radius = -1
         useRadius = True
@@ -172,15 +155,13 @@ class carVision(Node):
             detection_msg.detection_type = detected_color
 
         self.detection_publisher.publish(detection_msg)
+        
 
 def main(args=None):
     rclpy.init(args=args)
-    vision = Vision()
 
     try:
-        if not DEBUG:
-            threading.Thread(target=vision.camera_thread).start()
-        carVision_ = carVision(vision)
+        carVision_ = carVision()
         rclpy.spin(carVision_)
         carVision_.destroy_node()
         rclpy.shutdown()
