@@ -175,11 +175,11 @@ class Controller(Node):
 
     #Velocity multiplier callback
     def get_vel_multipler(self, msg):
-        if(msg.data == 3):
+        if(msg.detection_type == msg.GREEN_CIRCLE):
             self.velocity_multiplier = 1.0
-        elif(msg.data == 2):
+        elif(msg.detection_type == msg.YELLOW_CIRCLE):
             self.velocity_multiplier = 0.5
-        elif(msg.data == 1):
+        elif(msg.detection_type == msg.RED_CIRCLE):
             self.velocity_multiplier = 0.0
         else:
             self.velocity_multiplier = 0.0
