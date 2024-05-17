@@ -1,0 +1,42 @@
+file(REMOVE_RECURSE
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/msg/CIOState.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/msg/IOState.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/msg/RobotMsg.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/Call.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/ClearErr.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/ConfigToolModbus.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/FtCaliLoad.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/FtIdenLoad.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/GetAnalogIO.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/GetControllerDigitalIO.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/GetDigitalIO.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/GetErr.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/GetFloat32List.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/GetInt32.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/GetSetModbusData.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/GripperConfig.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/GripperMove.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/GripperState.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/Move.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/MoveAxisAngle.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/MoveVelo.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/MoveVelocity.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/PlayTraj.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/SetAxis.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/SetControllerAnalogIO.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/SetDigitalIO.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/SetFloat32.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/SetInt16.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/SetLoad.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/SetModbusTimeout.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/SetMultipleInts.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/SetString.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/SetToolModbus.lisp"
+  "/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/devel/share/common-lisp/ros/xarm_msgs/srv/TCPOffset.lisp"
+  "CMakeFiles/xarm_msgs_generate_messages_lisp"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang )
+  include(CMakeFiles/xarm_msgs_generate_messages_lisp.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

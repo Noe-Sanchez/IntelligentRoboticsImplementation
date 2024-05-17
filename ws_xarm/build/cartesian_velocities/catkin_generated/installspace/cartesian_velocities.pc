@@ -1,0 +1,8 @@
+prefix=/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/install
+
+Name: cartesian_velocities
+Description: Description of cartesian_velocities
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 
