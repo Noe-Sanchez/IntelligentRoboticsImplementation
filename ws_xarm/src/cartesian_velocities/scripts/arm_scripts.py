@@ -65,7 +65,10 @@ class xarm:
 			req.velocities = velocities
 			req.jnt_sync = 0
 			req.coord = 0
-			move_line(req)
+			if(self.check_arm_limits()):
+				move_line(req)
+			else:
+				self.stop_arm()
 		except rospy.ServiceException as e:
 			print("Service call failed: %s"%e)
 
@@ -74,7 +77,7 @@ class xarm:
 		try:
 			move_line = rospy.ServiceProxy('xarm/velo_move_line', MoveVelo)
 			req = MoveVeloRequest()
-			req.velocities = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+			req.velocities = [0.0] * 6
 			req.jnt_sync = 0
 			req.coord = 0
 			move_line(req)
@@ -106,5 +109,27 @@ class xarm:
 			calculated_distance = self.calculate_distance(current_pose, goal_pose)
 			time.sleep(0.1)
 		self.stop_arm()
-	
 
+	def check_arm_limits(self):
+		current_position = self.get_current_position()
+		distancie_from_the_center_in_x_y = m.sqrt(sum([v**2 for v in current_position[:2]]))
+		print(distancie_from_the_center_in_x_y)
+		if distancie_from_the_center_in_x_y < 170:
+			print("The arm is out of the limits")
+			self.stop_arm()
+			return False
+		if distancie_from_the_center_in_x_y > 500:
+			print("The arm is out of the limits")
+			self.stop_arm()
+			return False
+		if current_position[2] < 0:
+			print("The arm is out of the limits")
+			self.stop_arm()
+			return False
+		if current_position[2] > 600:
+			print("The arm is out of the limits")
+			self.stop_arm()
+			return False
+		else:
+			print("The arm is within the limits")
+			return True
