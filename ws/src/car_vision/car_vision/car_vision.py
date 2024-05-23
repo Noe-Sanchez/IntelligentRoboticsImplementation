@@ -4,7 +4,6 @@ import threading
 import pathlib
 from enum import IntEnum
 
-
 import rclpy
 from rclpy.node import Node
 from cv_bridge import CvBridge
@@ -17,6 +16,16 @@ from sensor_msgs.msg import Image
 DEBUG = False
 BASE_DIR = str(pathlib.Path(__file__).resolve().parent)
 
+#lower_bound for a reversed list
+def lower_bound(arr, target):
+    left, right = 0, len(arr)
+    while left < right:
+        mid = (left + right) // 2
+        if arr[mid][0][1] <= target:
+            right = mid
+        else:
+            left = mid + 1
+    return left
 class DetectionEnumerator(IntEnum):
     NO_DETECTION = 0
     RED_CIRCLE = 1
@@ -30,19 +39,131 @@ class carVision(Node):
         self.road_publisher = self.create_publisher(Float32, '/roadError', 10)
 
         self.camera_publisher = self.create_publisher(Image, '/image_detections', 10)
-        self.camera_subcriber = self.create_subscription(Image, '/image_raw', self.camera_callback, 10)
+        self.camera_subcriber = self.create_subscription(Image, '/video_source/raw', self.camera_callback, 10)
 
         time_interval = 0.1 # seconds
         self.timer = self.create_timer(time_interval, self.timer_callback)
         
-        self.bridge = CvBridge()
-        self.frame = None
+        self.frame = None  
+        self.directions = [1,0,-1,0,1]
+
+        # self.retrieve_camera_info()
 
     def camera_callback(self, msg):
         try:
-            self.frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            self.frame = CvBridge().imgmsg_to_cv2(msg, "bgr8")
         except Exception as e:
             self.get_logger().info(str(e))
+
+    def retrieve_camera_info(self):
+        data = np.load(BASE_DIR + '/calibration.npz')
+        self.repError = data['repError']
+        self.cameraMatrix = data['cameraMatrix']
+        self.distCoeffs = data['distCoeffs']
+        self.rvecs = data['rvecs']
+        self.tvecs = data['tvecs']
+
+        self.get_logger().info('Camera info retrieved')
+
+
+    def floodfill(self, frame, new_binary_image, x, y):
+        stack = [(x, y)]
+        new_binary_image[x][y] = 255
+        frame[x][y] = 0
+
+        while stack:
+            x, y = stack.pop()
+            for i in range(len(self.directions) - 1):
+                new_x = x + self.directions[i]
+                new_y = y + self.directions[i + 1]
+                
+                if new_x >= 0 and new_y >= 0 and new_x < frame.shape[0] and new_y < frame.shape[1]:
+                    if frame[new_x][new_y] == 255 and new_binary_image[new_x][new_y] == 0:
+                        stack.append((new_x, new_y))
+                        new_binary_image[new_x][new_y] = 255
+                        frame[new_x][new_y] = 0
+        
+        return new_binary_image
+    
+    def getCurvedLine(self, threshed_image):    
+        height, width = threshed_image.shape
+        scale = 0.2
+
+        y1 = int(height - (height * scale))
+        x_diff = int((width * scale) / 2)
+
+        crop_img = threshed_image[y1:height, x_diff:width - x_diff]
+
+        contours,hierarchy = cv2.findContours(crop_img,cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        
+        new_image = np.zeros((height, width), np.uint8)
+
+        if (len(contours) < 1):
+            return new_image
+        
+        max_contour = max(contours, key=cv2.contourArea) 
+        
+        for contour in max_contour:
+            x, y = contour[0]
+            if new_image[height - y - 1, x + x_diff - 1] != 1:
+                self.floodfill(threshed_image, new_image, height - y - 1, x + x_diff - 1)
+
+        return new_image
+
+    def getWaypoints(self, show_image=False):
+        if self.frame is None:
+            return 0.0
+
+        h, w, _ = self.frame.shape
+        croped_frame = self.frame[h // 2:h, :]
+        # Convert the image to grayscale
+        imgray = cv2.cvtColor(croped_frame, cv2.COLOR_BGR2GRAY)
+        #cv2.imshow("Imgray", imgray)
+        h, w = imgray.shape
+        # Binarize the image if necessary
+        _, binary_image = cv2.threshold(imgray, 90, 255, cv2.THRESH_BINARY)
+        binary_image = cv2.bitwise_not(binary_image)
+        #cv2.imshow("Binary Image", binary_image)
+
+        kernel = np.ones((2,2), np.uint8)
+        binary_image = cv2.erode(binary_image, kernel, iterations=1)
+
+        binary_image = cv2.dilate(binary_image, kernel, iterations=1)
+        
+
+        track_line = self.getCurvedLine(binary_image)
+
+        
+        # Set initial point at the bottom of the image and in the middle
+        initial_point = (int(w / 2), h - 1)
+
+        # Find contours of the binary image
+        contours, _ = cv2.findContours(track_line, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        if (len(contours) < 1):
+            return 0.0
+        
+        # Get the biggest contour
+        centerline_contour = max(contours, key=cv2.contourArea)
+
+        # Get the center of the contour
+        M = cv2.moments(centerline_contour)
+        
+        if M["m00"] == 0:
+            return 0.0
+        coords = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+
+        if show_image:
+            cv2.drawContours(croped_frame, contours, -1, (0,0,255))
+            cv2.circle(croped_frame, coords, 1, (255, 255, 0), -1)
+            cv2.circle(croped_frame, initial_point, 1, (255, 255, 0), -1)
+            self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(croped_frame, "bgr8"))
+
+        y = initial_point[0] - coords[0]
+        x = initial_point[1] - coords[1]
+        angle = np.degrees(np.arctan2(y, x))
+
+        return angle
     
     def getColoredCirles(self):
         if self.frame is None:
@@ -124,6 +245,9 @@ class carVision(Node):
         return circles_pts
 
     def timer_callback(self):
+        self.road_publisher.publish(Float32(data=self.getWaypoints(show_image=True)))
+        return
+
         detection_msg = Detection()
         circle_pts = self.getColoredCirles()
         min_distance = 254
@@ -153,7 +277,8 @@ class carVision(Node):
                     detection_msg.distance = min_distance
 
             detection_msg.detection_type = detected_color
-
+        
+        self.road_publisher.publish(Float32(data=self.getWaypoints()))
         self.detection_publisher.publish(detection_msg)
         
 

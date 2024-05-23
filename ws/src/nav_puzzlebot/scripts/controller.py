@@ -3,10 +3,13 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from geometry_msgs.msg import Twist, Pose2D, Point, PoseArray, Pose
-from std_msgs.msg import Int16
+from std_msgs.msg import Int16, Float32
 import numpy as np
 import math
 from car_interfaces.msg import Detection
+
+USING_POSE = False
+USING_LINE = True
 
 # Odometry node
 class Controller(Node):
@@ -22,19 +25,27 @@ class Controller(Node):
             depth=1
         )
 
+        
         # Angular velocity subscribers
-        self.odom_subscriber = self.create_subscription(Pose2D, 'odom', self.odom_callback, qos_profile=qos_profile_sub) # odometry topic subscriber
-        self.point_subscriber = self.create_subscription(PoseArray, '/trajectory', self.get_puntos_callback, 10) # pose topic subscriber
-        self.velocity_multiplier_suscriber = self.create_subscription(Detection, '/carDetections', self.get_vel_multipler, 10)
+        if USING_POSE:
+            self.odom_subscriber = self.create_subscription(Pose2D, 'odom', self.odom_callback, qos_profile=qos_profile_sub) # odometry topic subscriber
+            self.point_subscriber = self.create_subscription(PoseArray, '/trajectory', self.get_puntos_callback, 10) # pose topic subscriber
+            self.velocity_multiplier_suscriber = self.create_subscription(Detection, '/carDetections', self.get_vel_multipler, 10)
 
-        # Velocity publisher
-        self.vel_publisher = self.create_publisher(Twist, 'cmd_vel', 10) # velocity topic publisher
-        self.point_publisher = self.create_publisher(Int16, '/number_of_points', 10)
+        # Velocity publisherself.msg_vel = Twist() # velocity message
         self.vel_period = 0.05 # velocity publishing period (seconds)
-        self.vel_timer = self.create_timer(self.vel_period, self.vel_callback) # velocity publishing timer
         self.msg_vel = Twist() # velocity message
-        self.variablesInit()
+        self.vel_publisher = self.create_publisher(Twist, 'cmd_vel', 10) # velocity topic publisher
+        
+        if USING_POSE:
+            self.point_publisher = self.create_publisher(Int16, '/number_of_points', 10)
+        
+        if USING_LINE:
+            self.road_publisher = self.create_subscription(Float32, '/roadError', self.line_callback, 1)
+        
+        self.vel_timer = self.create_timer(self.vel_period, self.vel_callback) # velocity publishing timer
 
+        self.variablesInit()
         
         self.get_logger().info('Controller node successfully initialized!!!')
 
@@ -63,6 +74,7 @@ class Controller(Node):
         # Robot constants
         self.Kv = 0.25 # proportional linear velocity constant
         self.Kw = 0.25 # proportional angular velocity constant
+        self.KwL = 0.01 # proportional angular velocity constant
 
         # Robot pose variables
         self.theta = 0.0
@@ -80,7 +92,7 @@ class Controller(Node):
         # Flags when angVelocity and Linear Velocity end
         self.vfinish = True
         self.afinish = True
-        self.finish_config = False
+        self.finish_config = True
 
         # How many points have been crossed
         self.count = 0
@@ -188,7 +200,7 @@ class Controller(Node):
     # Odometry callback
     def vel_callback(self):
         if self.finish_config:
-            self.getVelocity()
+            #self.getVelocity()
             self.msg_vel.linear.x *= self.velocity_multiplier
             self.msg_vel.angular.z *= self.velocity_multiplier
             self.vel_publisher.publish(self.msg_vel)
@@ -199,11 +211,11 @@ class Controller(Node):
             # print(self.theta, end='')
             # print(self.puntos[self.count], end='')
             # print(self.thetaT, end='')
-            print("Distance error: ", self.error_d)
-            print("Angle error: ", self.error_ang)
-            print("Local car distance: ",self.distance)
-            print("Target distance: ", self.distance_t)
-            print("Difference between local car distance and target distance: ", self.distance_t-self.distance)
+            # print("Distance error: ", self.error_d)
+            # print("Angle error: ", self.error_ang)
+            # print("Local car distance: ",self.distance)
+            # print("Target distance: ", self.distance_t)
+            # print("Difference between local car distance and target distance: ", self.distance_t-self.distance)
             # self.get_logger().info('Velocities: {}'.format(self.msg_vel))
             # self.get_logger().info('Distance: {}'.format(self.distance))
             # self.get_logger().info('Angle: {}'.format(self.theta))
@@ -218,6 +230,34 @@ class Controller(Node):
         self.x = msg.x
         self.y = msg.y
         #self.get_logger().info('Odom: {}'.format(msg))
+
+    # Line follower callback
+    def line_callback(self, msg):
+        self.error_ang = msg.data
+        
+        #First, let robot turn until self.error_ang is diminutive
+        if (abs(self.error_ang) >= 10.0):
+            self.w = self.KwL * self.error_ang
+        else:
+            self.w = 0.0
+
+        self.v = self.maxlinear * 0.3
+    
+        if abs(self.v) > self.maxlinear:
+            self.msg_vel.linear.x = (abs(self.v) / self.v) * self.maxlinear
+        elif 0.0 < abs(self.v) and self.v < self.minlinear:
+            self.msg_vel.linear.x = (abs(self.v) / self.v) * self.minlinear
+        else:
+            self.msg_vel.linear.x = self.v
+
+        if abs(self.w) > self.maxang:
+            self.msg_vel.angular.z = (abs(self.w) / self.w) * self.maxang
+        elif 0.0 < abs(self.w) and self.w < self.minang:
+            self.msg_vel.angular.z = (abs(self.w) / self.w) * self.minang
+        else:
+            self.msg_vel.angular.z = self.w
+
+        print (self.v, self.w)
 
 # Run node
 def main(args=None):
