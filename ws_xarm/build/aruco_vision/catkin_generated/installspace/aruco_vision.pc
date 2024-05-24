@@ -1,0 +1,8 @@
+prefix=/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/install
+
+Name: aruco_vision
+Description: Description of aruco_vision
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

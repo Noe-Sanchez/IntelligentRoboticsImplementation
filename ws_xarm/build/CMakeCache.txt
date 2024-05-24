@@ -401,6 +401,12 @@ actionlib_DIR:PATH=/opt/ros/noetic/share/actionlib/cmake
 actionlib_msgs_DIR:PATH=/opt/ros/noetic/share/actionlib_msgs/cmake
 
 //Value Computed by CMake
+aruco_vision_BINARY_DIR:STATIC=/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/build/aruco_vision
+
+//Value Computed by CMake
+aruco_vision_SOURCE_DIR:STATIC=/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/src/aruco_vision
+
+//Value Computed by CMake
 camera_demo_BINARY_DIR:STATIC=/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/build/xarm_ros/xarm_vision/camera_demo
 
 //Value Computed by CMake
@@ -546,7 +552,7 @@ joint_state_controller_DIR:PATH=/opt/ros/noetic/share/joint_state_controller/cma
 kdl_parser_DIR:PATH=/opt/ros/noetic/share/kdl_parser/cmake
 
 //Path to a library.
-lib:FILEPATH=/opt/ros/noetic/lib/libtf2.so
+lib:FILEPATH=/opt/ros/noetic/lib/libxmlrpcpp.so
 
 //Value Computed by CMake
 lite6_moveit_config_BINARY_DIR:STATIC=/workspace/ros-workspace/IntelligentRoboticsImplementation/ws_xarm/build/xarm_ros/lite6_moveit_config
@@ -1008,7 +1014,7 @@ CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_NM
 CMAKE_NM-ADVANCED:INTERNAL=1
 //number of local generators
-CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=32
+CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=6
 //ADVANCED property for variable: CMAKE_OBJCOPY
 CMAKE_OBJCOPY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_OBJDUMP

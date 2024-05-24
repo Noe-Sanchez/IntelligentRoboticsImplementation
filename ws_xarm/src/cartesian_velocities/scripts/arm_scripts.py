@@ -53,36 +53,38 @@ class xarm:
 		try:
 			move_line = rospy.ServiceProxy('xarm/velo_move_line', MoveVelo)
 			req = MoveVeloRequest()
-			# for i in range(2):
-			# 	if velocities[i] > 20:
-			# 		velocities[i] = 20
-			# 	elif velocities[i] < -20:
-			# 		velocities[i] = -20
-			vel_ = velocities
-			vel_[3] = 0.0
-			vel_[4] = 0.0
-			vel_[5] = 0.0
+			for i in range(5):
+				if velocities[i] > 60:
+					velocities[i] = 60
+				elif velocities[i] < -60:
+					velocities[i] = -60
+			print(velocities)
+			velocities[3] = 0.0
+			velocities[4] = 0.0
+			velocities[5] = 0.0
 			req.velocities = velocities
 			req.jnt_sync = 0
 			req.coord = 0
-			if(self.check_arm_limits()):
-				move_line(req)
-			else:
-				self.stop_arm()
+			move_line(req)
+			# if(self.check_arm_limits()):
+			# 	move_line(req)
+			# else:
+			# 	self.stop_arm()
 		except rospy.ServiceException as e:
 			print("Service call failed: %s"%e)
 
 	def stop_arm(self):
 		rospy.wait_for_service('xarm/velo_move_line')
-		try:
-			move_line = rospy.ServiceProxy('xarm/velo_move_line', MoveVelo)
-			req = MoveVeloRequest()
-			req.velocities = [0.0] * 6
-			req.jnt_sync = 0
-			req.coord = 0
-			move_line(req)
-		except rospy.ServiceException as e:
-			print("Service call failed: %s"%e)
+		# try:
+		# 	move_line = rospy.ServiceProxy('xarm/velo_move_line', MoveVelo)
+		# 	req = MoveVeloRequest()
+		# 	req.velocities = [0.0] * 6
+		# 	req.jnt_sync = 0
+		# 	req.coord = 0
+		# 	move_line(req)
+		# except rospy.ServiceException as e:
+		#print("Service call failed: %s"%e)
+		print('hola')
 
 	def get_current_position(self):
 		get_position = rospy.ServiceProxy('/xarm/get_position_rpy', GetFloat32List)
