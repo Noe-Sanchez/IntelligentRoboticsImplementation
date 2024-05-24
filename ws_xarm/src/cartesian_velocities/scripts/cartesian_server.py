@@ -19,8 +19,8 @@ def cmd_vel_handle(twist):
     velocities = [0.0] * 6
     velocities[0] = twist.linear.x*multiplier
     velocities[1] = twist.linear.y*multiplier
-    #velocities[2] = twist.linear.z*multiplier
-    velocities[2] = 0.0
+    velocities[2] = twist.linear.z*multiplier
+    #velocities[2] = 0.0
     velocities[3] = twist.angular.x*multiplier
     velocities[4] = twist.angular.y*multiplier
     velocities[5] = twist.angular.z*multiplier
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     arm_limits_thread = threading.Thread(target=check_arm_limits_continuously)
     arm_limits_thread.daemon = True
     arm_limits_thread.start()
-    rospy.Subscriber('/aruco_pose', Twist, cmd_vel_handle)
+    rospy.Subscriber('/hand_velocity', Twist, cmd_vel_handle)
     print("Ready to move the arm")
     
     rospy.spin()
