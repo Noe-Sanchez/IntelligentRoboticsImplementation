@@ -237,7 +237,7 @@ class Controller(Node):
         
         #First, let robot turn until self.error_ang is diminutive
         if (abs(self.error_ang) >= 10.0):
-            self.w = self.KwL * self.error_ang
+            self.w = self.KwL * self.error_ang 
         else:
             self.w = 0.0
 
