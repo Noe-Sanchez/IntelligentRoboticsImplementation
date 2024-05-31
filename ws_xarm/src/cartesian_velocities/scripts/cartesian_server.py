@@ -48,7 +48,7 @@ if __name__ == "__main__":
     arm_limits_thread = threading.Thread(target=check_arm_limits_continuously)
     arm_limits_thread.daemon = True
     arm_limits_thread.start()
-    rospy.Subscriber('/hand_velocity', Twist, cmd_vel_handle)
+    rospy.Subscriber('/aruco_velocity', Twist, cmd_vel_handle)
     print("Ready to move the arm")
     
     rospy.spin()

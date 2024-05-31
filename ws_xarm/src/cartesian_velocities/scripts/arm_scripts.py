@@ -66,26 +66,25 @@ class xarm:
 			req.jnt_sync = 0
 			req.coord = 0
 			move_line(req)
-			# if(self.check_arm_limits()):
-			# 	move_line(req)
-			# else:
-			# 	self.stop_arm()
+			if(self.check_arm_limits()):
+				move_line(req)
+			else:
+				self.stop_arm()
 		except rospy.ServiceException as e:
 			print("Service call failed: %s"%e)
 
 	def stop_arm(self):
 		rospy.wait_for_service('xarm/velo_move_line')
-		# try:
-		# 	move_line = rospy.ServiceProxy('xarm/velo_move_line', MoveVelo)
-		# 	req = MoveVeloRequest()
-		# 	req.velocities = [0.0] * 6
-		# 	req.jnt_sync = 0
-		# 	req.coord = 0
-		# 	move_line(req)
-		# except rospy.ServiceException as e:
-		#print("Service call failed: %s"%e)
-		print('hola')
-
+		try:
+			move_line = rospy.ServiceProxy('xarm/velo_move_line', MoveVelo)
+			req = MoveVeloRequest()
+			req.velocities = [0.0] * 6
+			req.jnt_sync = 0
+			req.coord = 0
+			move_line(req)
+		except rospy.ServiceException as e:
+			print("Service call failed: %s"%e)
+			
 	def get_current_position(self):
 		get_position = rospy.ServiceProxy('/xarm/get_position_rpy', GetFloat32List)
 		actual_pose = list(get_position().datas)
