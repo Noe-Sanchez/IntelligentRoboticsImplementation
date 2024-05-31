@@ -4,7 +4,7 @@ import glob
 import pathlib
 
 import rclpy.logging
-from .vision_challenge04.cameraCalibration import calibrate
+from .cameraUtils.cameraCalibration import calibrate
 
 import rclpy
 from rclpy.node import Node
@@ -17,7 +17,7 @@ class CameraCalibration(Node):
         super().__init__('camera_calibration')
         self.camera_subcriber = self.create_subscription(Image, '/video_source/raw', self.image_callback, 10)
         self.BASE_DIR = str(pathlib.Path(__file__).resolve().parent)
-        self.calibrationDir = self.BASE_DIR + '/vision_challenge04/calibrationImg'
+        self.calibrationDir = self.BASE_DIR + '/cameraUtils/calibrationImg'
         self.frame = None
         self.flag = False
         self.timer = self.create_timer(0.1, self.getPics)

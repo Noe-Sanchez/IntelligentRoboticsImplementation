@@ -2,3 +2,5 @@
 */build
 */log
 */__pycache__
+dataset_original/
+yolov8n_custom/

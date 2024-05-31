@@ -11,6 +11,8 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Detection.msg"
+  "msg/Inference.msg"
+  "msg/InferenceArray.msg"
 )
 
 ament_export_dependencies(rosidl_default_runtime)

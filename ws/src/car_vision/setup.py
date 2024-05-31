@@ -24,6 +24,8 @@ setup(
             'thresholding = car_vision.thresholding:main',
             'ros_cam_calibration = car_vision.ros_cam_calibration:main',
             'take_image = car_vision.take_image:main',
+            'car_inference = car_vision.car_inference:main',
+            'webcamPublisher = car_vision.webcamPublisher:main',
         ],
     },
 )
