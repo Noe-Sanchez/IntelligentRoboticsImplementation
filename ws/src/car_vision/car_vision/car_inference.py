@@ -20,11 +20,11 @@ class carInference(Node):
         super().__init__('car_inference')
         self.model = ultralytics.YOLO(f'{BASE_PATH}/yolov8n_custom/weights/best.pt')
         self.bridge = CvBridge()
-        self.image_sub = self.create_subscription(Image, 'video_stream', self.image_callback, 10)
+        self.image_sub = self.create_subscription(Image, 'video_source/raw', self.image_callback, 10)
         self.detection_pub = self.create_publisher(InferenceArray, 'carInferences', 10)
         self.prevtime = time.time()
         self.frames = 0
-        self.threshold = 0.9
+        self.threshold = 0.7
 
         self.yolov8_warmup(10, False)
 
