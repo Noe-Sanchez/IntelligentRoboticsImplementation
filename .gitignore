@@ -5,3 +5,4 @@
 dataset_original/
 yolov8n_custom/
 *.pyc
+colors/

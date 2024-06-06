@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import pathlib
 
-BASE_DIR = str(pathlib.Path(__file__).resolve().parent) + '/calibrationImg'
+BASE_DIR = str(pathlib.Path(__file__).resolve().parent.parent) + '/colors'
 
 #hMin = 100 , sMin = 20, vMin = 135), (hMax = 135 , sMax = 100, vMax = 190)
 
@@ -12,7 +12,8 @@ def nothing(x):
 
 def main(args=None):
     cnt = 0
-    frame = cv2.imread(f'{BASE_DIR}/calibrationImg_{cnt}.jpg')
+    print(f'{BASE_DIR}/green/{cnt}.jpg')
+    frame = cv2.imread(f'{BASE_DIR}/green/{cnt}.jpg')
 
     # Create a window
     cv2.namedWindow('image')
@@ -35,19 +36,11 @@ def main(args=None):
     hMin = sMin = vMin = hMax = sMax = vMax = 0
     phMin = psMin = pvMin = phMax = psMax = pvMax = 0
 
-    #initialize on tthis values  hMin = 100 , sMin = 20, vMin = 135), (hMax = 135 , sMax = 100, vMax = 190)
-    cv2.setTrackbarPos('HMin', 'image', 100)
-    cv2.setTrackbarPos('SMin', 'image', 20)
-    cv2.setTrackbarPos('VMin', 'image', 135)
-    cv2.setTrackbarPos('HMax', 'image', 135)
-    cv2.setTrackbarPos('SMax', 'image', 100)
-    cv2.setTrackbarPos('VMax', 'image', 190)
-
 
     while(1):
         if frame is None:
             continue
-
+        frame = cv2.resize(frame, (800,400))
         # Get current positions of all trackbars
         hMin = cv2.getTrackbarPos('HMin', 'image')
         sMin = cv2.getTrackbarPos('SMin', 'image')
