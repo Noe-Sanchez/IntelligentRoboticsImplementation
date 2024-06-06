@@ -246,7 +246,7 @@ class carVision(Node):
 
     def timer_callback(self):
         self.road_publisher.publish(Float32(data=self.getWaypoints(show_image=True)))
-
+        
         detection_msg = Detection()
         circle_pts = self.getColoredCirles()
         min_distance = 254

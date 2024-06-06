@@ -10,7 +10,7 @@ class ImagePublisher(Node):
         self.bridge = CvBridge()
         self.cap = cv2.VideoCapture(0)
 
-        self.pub = self.create_publisher(Image, "/video_stream", 10)
+        self.pub = self.create_publisher(Image, "/video_source/raw", 10)
 
     def run(self):
         while True:

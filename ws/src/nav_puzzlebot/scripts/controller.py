@@ -6,10 +6,11 @@ from geometry_msgs.msg import Twist, Pose2D, Point, PoseArray, Pose
 from std_msgs.msg import Int16, Float32
 import numpy as np
 import math
-from car_interfaces.msg import Detection
+from car_interfaces.msg import Detection, Inference, InferenceArray
 
 USING_POSE = False
 USING_LINE = True
+USING_DETECTIONS = True
 
 # Odometry node
 class Controller(Node):
@@ -30,7 +31,6 @@ class Controller(Node):
         if USING_POSE:
             self.odom_subscriber = self.create_subscription(Pose2D, 'odom', self.odom_callback, qos_profile=qos_profile_sub) # odometry topic subscriber
             self.point_subscriber = self.create_subscription(PoseArray, '/trajectory', self.get_puntos_callback, 10) # pose topic subscriber
-            self.velocity_multiplier_suscriber = self.create_subscription(Detection, '/carDetections', self.get_vel_multipler, 10)
 
         # Velocity publisherself.msg_vel = Twist() # velocity message
         self.vel_period = 0.05 # velocity publishing period (seconds)
@@ -43,21 +43,16 @@ class Controller(Node):
         if USING_LINE:
             self.road_publisher = self.create_subscription(Float32, '/roadError', self.line_callback, 1)
         
+        if USING_DETECTIONS:
+            self.detection_subscriber = self.create_subscription(InferenceArray, '/carInferences', self.get_vel_multipler_inference, 10)
+            self.velocity_multiplier_suscriber = self.create_subscription(Detection, '/carDetections', self.get_vel_multipler, 10)
+        
         self.vel_timer = self.create_timer(self.vel_period, self.vel_callback) # velocity publishing timer
 
         self.variablesInit()
         
         self.get_logger().info('Controller node successfully initialized!!!')
 
-
-    # def generate_polygon(self, num_points, distance):
-    #         polygon = []
-    #         angle = 2 * math.pi / num_points
-    #         for i in range(num_points):
-    #             x = distance * math.cos(i * angle)
-    #             y = distance * math.sin(i * angle)
-    #             polygon.append([x, y])
-    #         return polygon
 
     # Variables inicialization
 
@@ -186,6 +181,34 @@ class Controller(Node):
             self.msg_vel.angular.z = self.w
 
     #Velocity multiplier callback
+    def get_vel_multipler_inference(self, msg):
+        # Iterate through InferenceArray msg
+        # uint8 FORWARD = 0
+        # uint8 GIVEAWAY = 1
+        # uint8 ROADWORK = 2
+        # uint8 ROUNDABOUT = 3
+        # uint8 STOP = 4
+        # uint8 TURN_RIGHT = 5
+        # uint8 TURN_LEFT = 6
+
+        for i in range(len(msg.detections)):
+            if(msg.detections[i].class_id == msg.detections[i].FORWARD):
+                self.velocity_multiplier = 1.0 # TODO
+            elif(msg.detections[i].class_id == msg.detections[i].GIVEAWAY):
+                self.velocity_multiplier = 0.5
+            elif(msg.detections[i].class_id == msg.detections[i].ROADWORK):
+                self.velocity_multiplier = 0.0
+            elif(msg.detections[i].class_id == msg.detections[i].ROUNDABOUT):
+                self.velocity_multiplier = 0.0 # TODO
+            elif(msg.detections[i].class_id == msg.detections[i].STOP):
+                self.velocity_multiplier = 0.0
+            elif(msg.detections[i].class_id == msg.detections[i].TURN_RIGHT):
+                self.velocity_multiplier = 0.0 # TODO
+            elif(msg.detections[i].class_id == msg.detections[i].TURN_LEFT):
+                self.velocity_multiplier = 0.0 # TODO
+            else:
+                self.velocity_multiplier = 1.0
+    
     def get_vel_multipler(self, msg):
         if(msg.detection_type == msg.GREEN_CIRCLE):
             self.velocity_multiplier = 1.0
