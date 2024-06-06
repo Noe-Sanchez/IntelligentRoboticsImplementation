@@ -4,3 +4,4 @@
 */__pycache__
 dataset_original/
 yolov8n_custom/
+*.pyc
