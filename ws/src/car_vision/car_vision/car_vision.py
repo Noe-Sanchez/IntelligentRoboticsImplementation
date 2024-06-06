@@ -12,8 +12,9 @@ from car_interfaces.msg import Detection
 from std_msgs.msg import Float32
 from sensor_msgs.msg import Image
 
+import json
 
-DEBUG = False
+DEBUG = True
 BASE_DIR = str(pathlib.Path(__file__).resolve().parent)
 
 #lower_bound for a reversed list
@@ -48,6 +49,21 @@ class carVision(Node):
         self.directions = [1,0,-1,0,1]
 
         # self.retrieve_camera_info()
+
+        # Get the HSV values for the colors from a json file
+        try:
+            
+            with open("/home/alexis/IntelligentRoboticsImplementation/ws/src/car_vision/car_vision/hsv_colors.json", 'r') as f:
+                self.hsv_dict = json.load(f) 
+        except FileNotFoundError:
+            self.hsv_dict = {
+                "green": [[0, 0, 0], [255, 255, 255]],
+                "red": [[0, 0, 0], [255, 255, 255]],
+                "yellow": [[0, 0, 0], [255, 255, 255]],
+            }
+
+        # Deserialize the dictionary and convert the values to numpy array
+        self.hsv_dict = {key: [np.array(value[0]), np.array(value[1])] for key, value in self.hsv_dict.items()}
 
     def camera_callback(self, msg):
         try:
@@ -168,51 +184,42 @@ class carVision(Node):
     def getColoredCirles(self):
         if self.frame is None:
             return []
-         # color verde using (hMin = 50 , sMin = 30, vMin = 50), (hMax = 80 , sMax = 255, vMax = 255)
-        lower_green = np.array([50, 30, 50])
-        upper_green = np.array([80, 255, 255])
-
-        # amarillo usando (hMin = 20 , sMin = 120, vMin = 140), (hMax = 100 , sMax = 200, vMax = 255)
-        lower_yellow = np.array([20, 120, 140])
-        upper_yellow = np.array([100, 200, 255])
-
-        #rojo using (hMin = 0 , sMin = 125, vMin = 90), (hMax = 5 , sMax = 255, vMax = 255)
-        lower_red = np.array([0, 125, 90])
-        upper_red = np.array([5, 255, 255])
-
+        
+        self.frame = cv2.resize(self.frame, (800,400))
+        
         detected_outputs = []
         hsvFrame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
-        unmasked_image = self.frame.copy()
-        # Masked image red
-        mask = cv2.inRange(hsvFrame, lower_red, upper_red)
-        # detected_output_red = cv2.bitwise_and(image, image, mask=mask)
-        detected_outputs.append(cv2.bitwise_and(unmasked_image, unmasked_image, mask=mask))
-        unmasked_image = self.frame.copy()
-        # Masked image green
-        mask = cv2.inRange(hsvFrame, lower_green, upper_green)
-        # detected_output_green = cv2.bitwise_and(image, image, mask=mask)
-        detected_outputs.append(cv2.bitwise_and(unmasked_image, unmasked_image, mask=mask))
-        unmasked_image = self.frame.copy()
-        # Masked image yellow
-        mask = cv2.inRange(hsvFrame, lower_yellow, upper_yellow)
-        # detected_output_yellow = cv2.bitwise_and(image, image, mask=mask)
-        detected_outputs.append(cv2.bitwise_and(unmasked_image, unmasked_image, mask=mask))
 
+        copy_frame = self.frame.copy()
+        
+
+        for color in self.hsv_dict.keys():
+            unmasked_image = self.frame.copy()
+            lower = self.hsv_dict[color][0]
+            upper = self.hsv_dict[color][1]
+            mask = cv2.inRange(hsvFrame, lower, upper)
+            detected_outputs.append(cv2.bitwise_and(unmasked_image, unmasked_image, mask=mask))
+            
         circles_pts = {}
 
-        for detected_output, color in zip(detected_outputs, [DetectionEnumerator.RED_CIRCLE, DetectionEnumerator.GREEN_CIRCLE, DetectionEnumerator.YELLOW_CIRCLE ]):
-            # if DEBUG:
-            #     cv2.imshow("Masked image " + str(color), detected_output)
-                # cv2.waitKey(0)
+        for detected_output, color in zip(detected_outputs, [DetectionEnumerator.YELLOW_CIRCLE, DetectionEnumerator.RED_CIRCLE, DetectionEnumerator.GREEN_CIRCLE]):
+            if DEBUG:
+                cv2.imshow("Masked image " + str(color), detected_output)
+                cv2.waitKey(1)
                 # cv2.destroyAllWindows()
             circles_pts[color] = []
             gray = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
             # blur = cv2.gaussianBlur(gray, 5)
             blur = cv2.GaussianBlur(gray,(9,9),2)
-            canny = cv2.Canny(blur, 75, 250)
 
-            # if DEBUG:
-            #     cv2.imshow("Blur image " + str(color), blur)
+            #diialte 
+            kernel = np.ones((5,5), np.uint8)
+            dilate = cv2.dilate(blur, kernel, iterations=2)
+
+            blur = cv2.GaussianBlur(dilate,(9,9),2)
+
+            if DEBUG:
+                cv2.imshow("Blur image " + str(color), blur)
 
             # Morph open 
             thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
@@ -237,16 +244,16 @@ class carVision(Node):
                     else:
                         color_rgb = (0, 255, 255)
                     
-                    cv2.circle(self.frame, (int(x), int(y)), int(r), color_rgb, 2)
+                    cv2.circle(copy_frame, (int(x), int(y)), int(r), color_rgb, 2)
 
-            # cv2.imshow('Detections', self.frame)
-            self.camera_publisher.publish(self.bridge.cv2_to_imgmsg(self.frame, "bgr8"))
+            cv2.imshow('Detections', copy_frame)
+            self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(copy_frame, "bgr8"))
             print ("Publishing image")        
         return circles_pts
 
     def timer_callback(self):
         self.road_publisher.publish(Float32(data=self.getWaypoints(show_image=True)))
-        
+        return
         detection_msg = Detection()
         circle_pts = self.getColoredCirles()
         min_distance = 254

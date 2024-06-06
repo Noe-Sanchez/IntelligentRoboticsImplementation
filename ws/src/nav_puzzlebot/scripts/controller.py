@@ -7,10 +7,16 @@ from std_msgs.msg import Int16, Float32
 import numpy as np
 import math
 from car_interfaces.msg import Detection, Inference, InferenceArray
+from enum import IntEnum
 
 USING_POSE = False
 USING_LINE = True
 USING_DETECTIONS = True
+
+class States(IntEnum):
+    IDLE = 0
+    INFERENCE = 1
+    FOLLOW_LINE = 2
 
 # Odometry node
 class Controller(Node):
@@ -26,38 +32,21 @@ class Controller(Node):
             depth=1
         )
 
-        
-        # Angular velocity subscribers
-        if USING_POSE:
-            self.odom_subscriber = self.create_subscription(Pose2D, 'odom', self.odom_callback, qos_profile=qos_profile_sub) # odometry topic subscriber
-            self.point_subscriber = self.create_subscription(PoseArray, '/trajectory', self.get_puntos_callback, 10) # pose topic subscriber
+        # Inference variables
+        self.inference_list = []
+        self.inference = Inference()
+
+        # Detection variables
+        self.detection = Detection()
+
+        # Robot constants
+        self.Kv = 0.25 # proportional linear velocity constant
+        self.Kw = 0.25 # proportional angular velocity constant
+        self.KwL = 0.01 # proportional angular velocity constant
 
         # Velocity publisherself.msg_vel = Twist() # velocity message
         self.vel_period = 0.05 # velocity publishing period (seconds)
         self.msg_vel = Twist() # velocity message
-        self.vel_publisher = self.create_publisher(Twist, 'cmd_vel', 10) # velocity topic publisher
-        
-        if USING_POSE:
-            self.point_publisher = self.create_publisher(Int16, '/number_of_points', 10)
-        
-        if USING_LINE:
-            self.road_publisher = self.create_subscription(Float32, '/roadError', self.line_callback, 1)
-        
-        if USING_DETECTIONS:
-            self.detection_subscriber = self.create_subscription(InferenceArray, '/carInferences', self.get_vel_multipler_inference, 10)
-            self.velocity_multiplier_suscriber = self.create_subscription(Detection, '/carDetections', self.get_vel_multipler, 10)
-        
-        self.vel_timer = self.create_timer(self.vel_period, self.vel_callback) # velocity publishing timer
-
-        self.variablesInit()
-        
-        self.get_logger().info('Controller node successfully initialized!!!')
-
-
-    # Variables inicialization
-
-    def variablesInit(self):
-        
         # Twist message
         self.msg_vel.linear.x = 0.0
         self.msg_vel.linear.y = 0.0
@@ -65,41 +54,35 @@ class Controller(Node):
         self.msg_vel.angular.x = 0.0
         self.msg_vel.angular.y = 0.0
         self.msg_vel.angular.z = 0.0
-        
-        # Robot constants
-        self.Kv = 0.25 # proportional linear velocity constant
-        self.Kw = 0.25 # proportional angular velocity constant
-        self.KwL = 0.01 # proportional angular velocity constant
 
+        # Line follower variables
+        self.line_v = 0.0
+        self.line_w = 0.0
+        
         # Robot pose variables
         self.theta = 0.0
         self.x = 0.0
         self.y = 0.0
 
-        # Robot velocity variables
-        self.v = 0.0
-        self.w = 0.0
+        # Flags when angVelocity and Linear Velocity end
+        self.vfinish = True
+        self.afinish = True
+        
+        self.xT = 0
+        self.yT = 0
 
         # Robot distance between points
         self.distance = 0
         self.distance_t = 0
 
-        # Flags when angVelocity and Linear Velocity end
-        self.vfinish = True
-        self.afinish = True
-        self.finish_config = True
-
-        # How many points have been crossed
-        self.count = 0
-
         # Points
-        self.puntos = []     
-        
-        self.xT = 0
-        self.yT = 0
+        self.puntos = []   
+        self.TARGET_TOLERANCE = 0.02  
 
-        self.TARGET_TOLERANCE = 0.02
-
+        self.forward_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
+        self.turn_left_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
+        self.turn_right_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
+        self.roundabout_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
 
         # Max & min velocities
         self.maxang = 1.25
@@ -108,16 +91,61 @@ class Controller(Node):
         self.minang = 0.4
         self.velocity_multiplier = 1.0
 
-    def get_puntos_callback(self,msg):
-        if(self.finish_config == False):
-            for pose in msg.poses:
-                self.punto = []
-                self.punto.append(pose.position.x)
-                self.punto.append(pose.position.y)
-                self.puntos.append(self.punto)
-            
-            self.finish_config = True
 
+        # Robot state
+        self.robot_state = States.IDLE
+
+        # Angular velocity subscribers
+        if USING_POSE:
+            self.odom_subscriber = self.create_subscription(Pose2D, 'odom', self.odom_callback, qos_profile=qos_profile_sub) # odometry topic subscriber
+        
+        if USING_LINE:
+            self.line_subscriber = self.create_subscription(Float32, '/roadError', self.line_callback, 1)
+        
+        if USING_DETECTIONS:
+            self.detection_subscriber = self.create_subscription(InferenceArray, '/carInferences', self.getInferences, 10)
+            self.velocity_multiplier_suscriber = self.create_subscription(Detection, '/carDetections', self.getDetections, 10)
+        
+        self.vel_publisher = self.create_publisher(Twist, 'cmd_vel', 10) # velocity topic publisher
+
+        self.vel_timer = self.create_timer(self.vel_period, self.state_machine) # velocity publishing timer
+        
+        self.get_logger().info('Controller node successfully initialized!!!')
+
+
+    # Update left motor angular velocity
+    def odom_callback(self, msg):
+        self.theta = msg.theta
+        self.x = msg.x
+        self.y = msg.y
+        #self.get_logger().info('Odom: {}'.format(msg))
+    
+    # Line follower callback
+    def line_callback(self, msg):
+        self.error_ang = msg.data
+        
+        #First, let robot turn until self.error_ang is diminutive
+        if (abs(self.error_ang) >= 5.0):
+            w = self.KwL * self.error_ang 
+        else:
+            w = 0.0
+
+        v = self.maxlinear * 0.3
+    
+        if abs(v) > self.maxlinear:
+            v = (abs(v) / v) * self.maxlinear
+        elif 0.0 < abs(v) and v < self.minlinear:
+            v = (abs(v) / v) * self.minlinear
+
+        if abs(w) > self.maxang:
+            w = (abs(w) / w) * self.maxang
+        elif 0.0 < abs(w) and w < self.minang:
+            w = (abs(w) / w) * self.minang
+        
+
+        self.line_v = v
+        self.line_w = w
+    
 
     def getVelocity(self):
         # After one part of the trajectory is ready, update points
@@ -125,15 +153,11 @@ class Controller(Node):
             self.distance = 0
             self.vfinish = False
             self.afinish = False
-            if self.count < len(self.puntos) - 1: 
-                self.xT = self.puntos[self.count+1][0]
-                self.yT = self.puntos[self.count+1][1]
-                self.count +=1
+
+            if len(self.puntos) > 0:
+                self.xT, self.yT = self.puntos.pop(0)
             else:
-                self.count = 0
-                self.xT = self.puntos[self.count][0]
-                self.yT = self.puntos[self.count][1]
-                #self.finish = True
+                pass
             
         # Obtain distance and angle between points
         deltay = self.yT - self.y
@@ -152,135 +176,103 @@ class Controller(Node):
         
         #First, let robot turn until self.error_ang is diminutive
         if (abs(self.error_ang) >= 0.05):
-            self.w = self.Kw * self.error_ang
+            w = self.Kw * self.error_ang
         else:
-            self.w = 0.0
+            w = 0.0
             self.afinish = True
 
         #If robot turn is finish, let robot have linear velocity
         if self.afinish:
             if self.error_d > 0.05 : 
-                self.v = self.Kv * self.error_d
+                v = self.Kv * self.error_d
             else: 
                 self.vfinish = True
+                v = 0.0
         else:
-            self.v = 0.0
+            v = 0.0
     
-        if abs(self.v) > self.maxlinear:
-            self.msg_vel.linear.x = (abs(self.v) / self.v) * self.maxlinear
-        elif 0.0 < abs(self.v) and self.v < self.minlinear:
-            self.msg_vel.linear.x = (abs(self.v) / self.v) * self.minlinear
-        else:
-            self.msg_vel.linear.x = self.v
+        if abs(v) > self.maxlinear:
+            v = (abs(v) / v) * self.maxlinear
+        elif 0.0 < abs(v) and v < self.minlinear:
+            v = (abs(v) / v) * self.minlinear
 
-        if abs(self.w) > self.maxang:
-            self.msg_vel.angular.z = (abs(self.w) / self.w) * self.maxang
-        elif 0.0 < abs(self.w) and self.w < self.minang:
-            self.msg_vel.angular.z = (abs(self.w) / self.w) * self.minang
-        else:
-            self.msg_vel.angular.z = self.w
+        if abs(w) > self.maxang:
+            w = (abs(w) / w) * self.maxang
+        elif 0.0 < abs(w) and w < self.minang:
+            w = (abs(w) / w) * self.minang
+
+        return v, w
+       
+    # Inferences callback
+    def getInferences(self, msg):
+        # Iterate through InferenceArray msg
+        self.inference_list = []
+        for i in range(len(msg.detections)):
+            self.get_logger().info('Inference: {}'.format(self.inference.class_id))
+            if(msg.detections[i].class_id not in [msg.detections[i].FORWARD, msg.detections[i].TURN_LEFT, msg.detections[i].TURN_RIGHT, msg.detections[i].ROUNDABOUT]):
+                self.inference_list.append(msg.detections[i])
+            else:
+                #self.robot_state = States.INFERENCE
+                self.inference = msg.detections[i]
+                break
 
     #Velocity multiplier callback
-    def get_vel_multipler_inference(self, msg):
-        # Iterate through InferenceArray msg
-        # uint8 FORWARD = 0
-        # uint8 GIVEAWAY = 1
-        # uint8 ROADWORK = 2
-        # uint8 ROUNDABOUT = 3
-        # uint8 STOP = 4
-        # uint8 TURN_RIGHT = 5
-        # uint8 TURN_LEFT = 6
-
-        for i in range(len(msg.detections)):
-            if(msg.detections[i].class_id == msg.detections[i].FORWARD):
-                self.velocity_multiplier = 1.0 # TODO
-            elif(msg.detections[i].class_id == msg.detections[i].GIVEAWAY):
+    def get_vel_multipler(self):
+        for inference in self.inference_list:
+            if(inference.class_id == inference.GIVEAWAY):
                 self.velocity_multiplier = 0.5
-            elif(msg.detections[i].class_id == msg.detections[i].ROADWORK):
+            elif(inference.class_id == inference.ROADWORK):
+                self.velocity_multiplier = 0.5
+            elif(inference.class_id == inference.STOP):
                 self.velocity_multiplier = 0.0
-            elif(msg.detections[i].class_id == msg.detections[i].ROUNDABOUT):
-                self.velocity_multiplier = 0.0 # TODO
-            elif(msg.detections[i].class_id == msg.detections[i].STOP):
-                self.velocity_multiplier = 0.0
-            elif(msg.detections[i].class_id == msg.detections[i].TURN_RIGHT):
-                self.velocity_multiplier = 0.0 # TODO
-            elif(msg.detections[i].class_id == msg.detections[i].TURN_LEFT):
-                self.velocity_multiplier = 0.0 # TODO
             else:
                 self.velocity_multiplier = 1.0
-    
-    def get_vel_multipler(self, msg):
-        if(msg.detection_type == msg.GREEN_CIRCLE):
-            self.velocity_multiplier = 1.0
-        elif(msg.detection_type == msg.YELLOW_CIRCLE):
-            self.velocity_multiplier = 0.5
-        elif(msg.detection_type == msg.RED_CIRCLE):
-            self.velocity_multiplier = 0.0
-        else:
-            self.velocity_multiplier = 0.0
 
+        if(self.detection.detection_type == self.detection.GREEN_CIRCLE):
+            self.velocity_multiplier = 1.0
+        elif(self.detection.detection_type == self.detection.YELLOW_CIRCLE):
+            self.velocity_multiplier = 0.5
+        elif(self.detection.detection_type == self.detection.RED_CIRCLE or self.detection.detection_type == self.detection.INTERSECTION):
+            self.velocity_multiplier = 0.0
+    
+    def getDetections(self, msg):
+        self.detection = msg
 
     # Odometry callback
-    def vel_callback(self):
-        if self.finish_config:
-            #self.getVelocity()
-            self.msg_vel.linear.x *= self.velocity_multiplier
-            self.msg_vel.angular.z *= self.velocity_multiplier
-            self.vel_publisher.publish(self.msg_vel)
-            
+    def state_machine(self):
+        self.get_logger().info('State: {}'.format(self.robot_state))
+        if self.robot_state == States.IDLE:
+            self.msg_vel.linear.x = 0.0
+            self.msg_vel.angular.z = 0.0
+            self.robot_state = States.FOLLOW_LINE
+        elif self.robot_state == States.FOLLOW_LINE:
+            self.msg_vel.linear.x = self.line_v
+            self.msg_vel.angular.z = self.line_w
+        # elif self.robot_state == States.INFERENCE:
+        #     if len(self.puntos) == 0:
+        #         if self.inference.class_id == self.inference.FORWARD:
+        #             self.puntos = self.forward_points
+        #         elif self.inference.class_id == self.inference.TURN_LEFT:
+        #             self.puntos = self.turn_left_points
+        #         elif self.inference.class_id == self.inference.TURN_RIGHT:
+        #             self.puntos = self.turn_right_points
+        #         elif self.inference.class_id == self.inference.ROUNDABOUT:
+        #             self.puntos = self.roundabout_points
 
-            # print(self.msg_vel, end='')
-            # print(self.distance, end='')
-            # print(self.theta, end='')
-            # print(self.puntos[self.count], end='')
-            # print(self.thetaT, end='')
-            # print("Distance error: ", self.error_d)
-            # print("Angle error: ", self.error_ang)
-            # print("Local car distance: ",self.distance)
-            # print("Target distance: ", self.distance_t)
-            # print("Difference between local car distance and target distance: ", self.distance_t-self.distance)
-            # self.get_logger().info('Velocities: {}'.format(self.msg_vel))
-            # self.get_logger().info('Distance: {}'.format(self.distance))
-            # self.get_logger().info('Angle: {}'.format(self.theta))
-            #self.get_logger().info('Punto: {}'.format(self.puntos[self.count]))
-            # self.get_logger().info('theta: {}'.format(self.thetaT))
-            # self.get_logger().info('error_d: {}'.format(self.error_d))
-            # self.get_logger().info('error_a: {}'.format(self.error_ang))
+        #         for i in range(len(self.puntos)):
+        #             self.puntos[i] = (self.puntos[i][0] + self.x, self.puntos[i][1] + self.y)
 
-    # Update left motor angular velocity
-    def odom_callback(self, msg):
-        self.theta = msg.theta
-        self.x = msg.x
-        self.y = msg.y
-        #self.get_logger().info('Odom: {}'.format(msg))
 
-    # Line follower callback
-    def line_callback(self, msg):
-        self.error_ang = msg.data
+        #     self.msg_vel.linear.x, self.msg_vel.angular.z = self.getVelocity()  
+              
+        #     if (len(self.puntos) == 0):
+        #         self.robot_state = States.FOLLOW_LINE
+
+        # self.get_vel_multipler()
         
-        #First, let robot turn until self.error_ang is diminutive
-        if (abs(self.error_ang) >= 10.0):
-            self.w = self.KwL * self.error_ang 
-        else:
-            self.w = 0.0
-
-        self.v = self.maxlinear * 0.3
-    
-        if abs(self.v) > self.maxlinear:
-            self.msg_vel.linear.x = (abs(self.v) / self.v) * self.maxlinear
-        elif 0.0 < abs(self.v) and self.v < self.minlinear:
-            self.msg_vel.linear.x = (abs(self.v) / self.v) * self.minlinear
-        else:
-            self.msg_vel.linear.x = self.v
-
-        if abs(self.w) > self.maxang:
-            self.msg_vel.angular.z = (abs(self.w) / self.w) * self.maxang
-        elif 0.0 < abs(self.w) and self.w < self.minang:
-            self.msg_vel.angular.z = (abs(self.w) / self.w) * self.minang
-        else:
-            self.msg_vel.angular.z = self.w
-
-        print (self.v, self.w)
+        self.msg_vel.linear.x *= self.velocity_multiplier
+        self.msg_vel.angular.z *= self.velocity_multiplier
+        self.vel_publisher.publish(self.msg_vel)
 
 # Run node
 def main(args=None):

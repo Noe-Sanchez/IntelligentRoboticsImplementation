@@ -19,7 +19,7 @@ class takeImage(Node):
         self.camera_subcriber = self.create_subscription(Image, '/video_source/raw', self.image_callback, 10)
         self.BASE_DIR = str(pathlib.Path(__file__).resolve().parent)
         self.saving_dir = self.BASE_DIR + '/saved_images'
-        self.dataset_dir = self.BASE_DIR + '/dataset'
+        self.dataset_dir = self.BASE_DIR + '/colors'
         self.frame = None
         self.flag = False
         self.timer = self.create_timer(0.1, self.getPics)
@@ -35,7 +35,6 @@ class takeImage(Node):
         for key, value in self.labels.items():
             self.get_logger().info(f'{chr(key)}: {value}')
         
-
         
     def image_callback(self, msg):
         try:
