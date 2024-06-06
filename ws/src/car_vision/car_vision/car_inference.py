@@ -14,13 +14,15 @@ import cv2
 
 
 BASE_PATH = pathlib.Path(__file__).parent.absolute()
+print("BASE_PATH: ", BASE_PATH)
 
 class carInference(Node):
     def __init__(self):
         super().__init__('car_inference')
         self.model = ultralytics.YOLO(f'{BASE_PATH}/yolov8n_custom/weights/best.pt')
         self.bridge = CvBridge()
-        self.image_sub = self.create_subscription(Image, 'video_stream', self.image_callback, 10)
+        self.image_sub = self.create_subscription(Image, '/video_source/raw', self.image_callback, 10)
+        self.visualization_pub = self.create_publisher(Image, 'carInferenceVisualization', 10)
         self.detection_pub = self.create_publisher(InferenceArray, 'carInferences', 10)
         self.prevtime = time.time()
         self.frames = 0
@@ -50,8 +52,10 @@ class carInference(Node):
             cv2.putText(frame, class_name, (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
             
-        cv2.imshow("frame", frame)
-        cv2.waitKey(1)
+        # cv2.imshow("frame", frame)
+        # cv2.waitKey(1)
+        # publish visualization
+        self.visualization_pub.publish(self.bridge.cv2_to_imgmsg(frame, 'bgr8'))
         inferenceArrayMsg.detections = inferenceArray
 
         self.detection_pub.publish(inferenceArrayMsg)
