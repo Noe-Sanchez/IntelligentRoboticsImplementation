@@ -26,7 +26,7 @@ class carInference(Node):
         self.detection_pub = self.create_publisher(InferenceArray, 'carInferences', 10)
         self.prevtime = time.time()
         self.frames = 0
-        self.threshold = 0.7
+        self.threshold = 0.9
 
         self.yolov8_warmup(10, False)
 

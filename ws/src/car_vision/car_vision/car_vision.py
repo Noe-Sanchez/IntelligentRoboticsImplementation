@@ -68,6 +68,7 @@ class carVision(Node):
     def camera_callback(self, msg):
         try:
             self.frame = CvBridge().imgmsg_to_cv2(msg, "bgr8")
+            print("Frame received")
         except Exception as e:
             self.get_logger().info(str(e))
 
@@ -131,7 +132,8 @@ class carVision(Node):
             return 0.0
 
         h, w, _ = self.frame.shape
-        croped_frame = self.frame[h // 2:h, :]
+        croped_frame = self.frame[h - h // 4:h, w // 4: w - w // 4].copy()
+        h, w, _ = croped_frame.shape
         # Convert the image to grayscale
         imgray = cv2.cvtColor(croped_frame, cv2.COLOR_BGR2GRAY)
         #cv2.imshow("Imgray", imgray)
@@ -147,7 +149,8 @@ class carVision(Node):
         binary_image = cv2.dilate(binary_image, kernel, iterations=1)
         
 
-        track_line = self.getCurvedLine(binary_image)
+        #track_line = self.getCurvedLine(binary_image)
+        track_line = binary_image
 
         
         # Set initial point at the bottom of the image and in the middle
