@@ -21,20 +21,24 @@ class carInference(Node):
         super().__init__('car_inference')
         self.model = ultralytics.YOLO(f'{BASE_PATH}/yolov8n_custom/weights/best.pt')
         self.bridge = CvBridge()
-        # self.image_sub = self.create_subscription(Image, '/video_source/raw', self.image_callback, 10)
-        self.comp_sub = self.create_subscription(CompressedImage, 'comp_img', self.image_callback, 10)
+        self.image_sub = self.create_subscription(Image, '/video_source/raw', self.image_callback, 10)
+        #self.comp_sub = self.create_subscription(CompressedImage, '/video_source/compressed', self.image_callback, 10)
         self.visualization_pub = self.create_publisher(Image, 'carInferenceVisualization', 10)
         self.detection_pub = self.create_publisher(InferenceArray, 'carInferences', 10)
         self.prevtime = time.time()
         self.frames = 0
-        self.threshold = 0.9
+        self.threshold = 0.3
 
         self.yolov8_warmup(10, False)
 
+        # Print all labels and their corresponding class ids
+        print (self.model.names)
+
+
     def image_callback(self, msg):
-        np_arr = np.frombuffer(msg.data, np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        # frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+        # np_arr = np.frombuffer(msg.data, np.uint8)
+        # frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
         results = self.model(frame, verbose=False)
         boxes, confidences, classids = self.generate_boxes_confidences_classids_v8(results)
 
@@ -60,7 +64,7 @@ class carInference(Node):
         # publish visualization
         self.visualization_pub.publish(self.bridge.cv2_to_imgmsg(frame, 'bgr8'))
         inferenceArrayMsg.detections = inferenceArray
-
+        print(inferenceArray)
         self.detection_pub.publish(inferenceArrayMsg)
     
     def yolov8_warmup(self, repetitions=1, verbose = False):
