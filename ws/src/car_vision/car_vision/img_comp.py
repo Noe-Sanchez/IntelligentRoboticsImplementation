@@ -11,8 +11,8 @@ from sensor_msgs.msg import Image
 class Publisher(Node):
 	def __init__(self):
 		super().__init__('imgcomp_pub')
-		self.declare_parameter('width',100)
-		self.declare_parameter('height',50)
+		self.declare_parameter('width',400)
+		self.declare_parameter('height',200)
 
 		self.width = self.get_parameter('width').get_parameter_value().integer_value
 		self.height = self.get_parameter('height').get_parameter_value().integer_value
