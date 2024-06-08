@@ -27,6 +27,7 @@ setup(
             'car_inference = car_vision.car_inference:main',
             'webcamPublisher = car_vision.webcamPublisher:main',
             'intersection_detector = car_vision.intersection_detector:main',
+            'img_comp = car_vision.img_comp:main'
         ],
     },
 )

@@ -15,7 +15,7 @@ import cv2
 BASE_PATH = pathlib.Path(__file__).parent.absolute()
 print("BASE_PATH: ", BASE_PATH)
 
-class carInference(Node):
+class intersectionDetector(Node):
     def __init__(self):
         super().__init__('car_inference')
         self.bridge = CvBridge()
@@ -69,9 +69,9 @@ def main(args=None):
     rclpy.init(args=args)
 
     try:
-        carInference_ = carInference()
-        rclpy.spin(carInference_)
-        carInference_.destroy_node()
+        intersectionDetector_ = intersectionDetector()
+        rclpy.spin(intersectionDetector_)
+        intersectionDetector_.destroy_node()
         rclpy.shutdown()
     except KeyboardInterrupt:
         pass

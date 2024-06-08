@@ -9,7 +9,7 @@ import math
 from car_interfaces.msg import Detection, Inference, InferenceArray
 from enum import IntEnum
 
-USING_POSE = False
+USING_POSE = True
 USING_LINE = True
 USING_DETECTIONS = True
 
@@ -17,6 +17,7 @@ class States(IntEnum):
     IDLE = 0
     INFERENCE = 1
     FOLLOW_LINE = 2
+    STOP = 3
 
 # Odometry node
 class Controller(Node):
@@ -38,14 +39,19 @@ class Controller(Node):
 
         # Detection variables
         self.detection = Detection()
+        self.detection.detection_type = self.detection.NO_DETECTION
+
+        # Intersection id
+        self.intersection_id = 999.0
 
         # Robot constants
         self.Kv = 0.25 # proportional linear velocity constant
         self.Kw = 0.25 # proportional angular velocity constant
-        self.KwL = 0.01 # proportional angular velocity constant
+        self.KwL = 0.00008 # proportional angular velocity constant
+        self.KdwL = 0.05
 
         # Velocity publisherself.msg_vel = Twist() # velocity message
-        self.vel_period = 0.05 # velocity publishing period (seconds)
+        self.vel_period = 0.01 # velocity publishing period (seconds)
         self.msg_vel = Twist() # velocity message
         # Twist message
         self.msg_vel.linear.x = 0.0
@@ -58,6 +64,7 @@ class Controller(Node):
         # Line follower variables
         self.line_v = 0.0
         self.line_w = 0.0
+        self.intersection_flag = False
         
         # Robot pose variables
         self.theta = 0.0
@@ -79,9 +86,10 @@ class Controller(Node):
         self.puntos = []   
         self.TARGET_TOLERANCE = 0.02  
 
-        self.forward_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
-        self.turn_left_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
-        self.turn_right_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
+        
+        self.forward_points = [(0.30, 0.0)]
+        self.turn_left_points = [(0.35, 0.0), (0.35, -0.35)]
+        self.turn_right_points = [(0.35, 0.0), (0.35, 0.35)]
         self.roundabout_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
 
         # Max & min velocities
@@ -90,6 +98,7 @@ class Controller(Node):
         self.minlinear = 0.05
         self.minang = 0.4
         self.velocity_multiplier = 1.0
+        self.lasterror_ang = 0.0
 
 
         # Robot state
@@ -122,16 +131,22 @@ class Controller(Node):
     
     # Line follower callback
     def line_callback(self, msg):
-        self.error_ang = msg.data
+        self.error_ang_line = msg.data
         
-        #First, let robot turn until self.error_ang is diminutive
-        if (abs(self.error_ang) >= 5.0):
-            w = self.KwL * self.error_ang 
+        if self.error_ang_line == self.intersection_id:
+            self.line_v = 0.0
+            self.line_w = 0.0
+            self.intersection_flag = True
+            return
+
+        #First, let robot turn until self.error_ang_line is diminutive
+        if (abs(self.error_ang_line) >= 5.0):
+            w = self.KwL * self.error_ang_line + self.KdwL * (self.error_ang_line - self.lasterror_ang) * self.vel_period 
         else:
             w = 0.0
 
         v = self.maxlinear * 0.3
-    
+        self.lasterror_ang = self.error_ang_line
         if abs(v) > self.maxlinear:
             v = (abs(v) / v) * self.maxlinear
         elif 0.0 < abs(v) and v < self.minlinear:
@@ -157,7 +172,10 @@ class Controller(Node):
             if len(self.puntos) > 0:
                 self.xT, self.yT = self.puntos.pop(0)
             else:
-                pass
+                return 0.0, 0.0
+        
+        print(self.xT, self.yT)
+        print(self.x, self.y)
             
         # Obtain distance and angle between points
         deltay = self.yT - self.y
@@ -187,6 +205,7 @@ class Controller(Node):
                 v = self.Kv * self.error_d
             else: 
                 self.vfinish = True
+                print("Reached")
                 v = 0.0
         else:
             v = 0.0
@@ -208,32 +227,39 @@ class Controller(Node):
         # Iterate through InferenceArray msg
         self.inference_list = []
         for i in range(len(msg.detections)):
-            self.get_logger().info('Inference: {}'.format(self.inference.class_id))
+            self.get_logger().info('Inference: {}'.format(msg.detections[i].class_id))
             if(msg.detections[i].class_id not in [msg.detections[i].FORWARD, msg.detections[i].TURN_LEFT, msg.detections[i].TURN_RIGHT, msg.detections[i].ROUNDABOUT]):
                 self.inference_list.append(msg.detections[i])
             else:
-                #self.robot_state = States.INFERENCE
+                if (self.intersection_flag):
+                    self.robot_state = States.INFERENCE
                 self.inference = msg.detections[i]
                 break
 
     #Velocity multiplier callback
     def get_vel_multipler(self):
-        for inference in self.inference_list:
-            if(inference.class_id == inference.GIVEAWAY):
-                self.velocity_multiplier = 0.5
-            elif(inference.class_id == inference.ROADWORK):
-                self.velocity_multiplier = 0.5
-            elif(inference.class_id == inference.STOP):
-                self.velocity_multiplier = 0.0
-            else:
-                self.velocity_multiplier = 1.0
-
-        if(self.detection.detection_type == self.detection.GREEN_CIRCLE):
+        #self.get_logger().info('Inference length: {}'.format(len(self.inference_list)))
+        if len(self.inference_list) > 0:
+            while len(self.inference_list) > 0:
+                inference = self.inference_list.pop()
+                self.get_logger().info('Inference: {}'.format(inference.class_id))
+                if(inference.class_id == inference.GIVEAWAY):
+                    self.velocity_multiplier = 0.5
+                elif(inference.class_id == inference.ROADWORK):
+                    self.velocity_multiplier = 0.5
+                elif(inference.class_id == inference.STOP and inference.confidence > 0.9):
+                    self.velocity_multiplier = 0.0
+                    self.robot_state = States.STOP
+        else: 
             self.velocity_multiplier = 1.0
-        elif(self.detection.detection_type == self.detection.YELLOW_CIRCLE):
-            self.velocity_multiplier = 0.5
-        elif(self.detection.detection_type == self.detection.RED_CIRCLE or self.detection.detection_type == self.detection.INTERSECTION):
-            self.velocity_multiplier = 0.0
+        
+
+        # if(self.detection.detection_type == self.detection.GREEN_CIRCLE):
+        #     self.velocity_multiplier = 1.0
+        # elif(self.detection.detection_type == self.detection.YELLOW_CIRCLE):
+        #     self.velocity_multiplier = 0.5
+        # elif(self.detection.detection_type == self.detection.RED_CIRCLE):
+        #     self.velocity_multiplier = 0.0
     
     def getDetections(self, msg):
         self.detection = msg
@@ -246,29 +272,43 @@ class Controller(Node):
             self.msg_vel.angular.z = 0.0
             self.robot_state = States.FOLLOW_LINE
         elif self.robot_state == States.FOLLOW_LINE:
-            self.msg_vel.linear.x = self.line_v
-            self.msg_vel.angular.z = self.line_w
-        # elif self.robot_state == States.INFERENCE:
-        #     if len(self.puntos) == 0:
-        #         if self.inference.class_id == self.inference.FORWARD:
-        #             self.puntos = self.forward_points
-        #         elif self.inference.class_id == self.inference.TURN_LEFT:
-        #             self.puntos = self.turn_left_points
-        #         elif self.inference.class_id == self.inference.TURN_RIGHT:
-        #             self.puntos = self.turn_right_points
-        #         elif self.inference.class_id == self.inference.ROUNDABOUT:
-        #             self.puntos = self.roundabout_points
+            if USING_LINE:
+                self.msg_vel.linear.x = self.line_v
+                self.msg_vel.angular.z = self.line_w
 
-        #         for i in range(len(self.puntos)):
-        #             self.puntos[i] = (self.puntos[i][0] + self.x, self.puntos[i][1] + self.y)
+                if self.intersection_flag:
+                    self.msg_vel.linear.x = self.maxlinear * 0.3
+            else:
+                self.msg_vel.linear.x = self.maxlinear * 0.6
+                self.msg_vel.angular.z = 0.0
+        elif self.robot_state == States.INFERENCE:
+            if len(self.puntos) == 0:
+                if self.inference.class_id == self.inference.FORWARD:
+                    self.puntos = self.forward_points.copy()
+                elif self.inference.class_id == self.inference.TURN_LEFT:
+                    self.puntos = self.turn_left_points.copy()
+                elif self.inference.class_id == self.inference.TURN_RIGHT:
+                    self.puntos = self.turn_right_points.copy()
+                elif self.inference.class_id == self.inference.ROUNDABOUT:
+                    self.puntos = self.roundabout_points.copy()
+
+                for i in range(len(self.puntos)):
+                    self.puntos[i] = (self.puntos[i][0] + self.x, self.puntos[i][1] + self.y)
+
+                self.puntos.append(self.puntos[-1])
 
 
-        #     self.msg_vel.linear.x, self.msg_vel.angular.z = self.getVelocity()  
+            self.msg_vel.linear.x, self.msg_vel.angular.z = self.getVelocity()  
               
-        #     if (len(self.puntos) == 0):
-        #         self.robot_state = States.FOLLOW_LINE
+            if (len(self.puntos) == 0):
+                self.robot_state = States.FOLLOW_LINE
+                self.intersection_flag = False
+        elif self.robot_state == States.STOP:
+            self.msg_vel.linear.x = 0.0
+            self.msg_vel.angular.z = 0.0
 
-        # self.get_vel_multipler()
+
+        self.get_vel_multipler()
         
         self.msg_vel.linear.x *= self.velocity_multiplier
         self.msg_vel.angular.z *= self.velocity_multiplier

@@ -14,7 +14,7 @@ from sensor_msgs.msg import Image
 
 import json
 
-DEBUG = False
+DEBUG = True
 BASE_DIR = str(pathlib.Path(__file__).resolve().parent)
 
 #lower_bound for a reversed list
@@ -40,7 +40,6 @@ class carVision(Node):
         self.road_publisher = self.create_publisher(Float32, '/roadError', 10)
 
         self.camera_publisher = self.create_publisher(Image, '/image_detections', 10)
-        #self.camera_publisher_colors = self.create_publisher(Image, '/image_detections_colors', 10)
         self.camera_subcriber = self.create_subscription(Image, '/video_source/raw', self.camera_callback, 10)
 
         time_interval = 0.1 # seconds
@@ -57,7 +56,6 @@ class carVision(Node):
             with open("/home/puzzlebot/IntelligentRoboticsImplementation/ws/src/car_vision/car_vision/hsv_colors.json", 'r') as f:
                 self.hsv_dict = json.load(f) 
         except FileNotFoundError:
-            print("HSV file not found")
             self.hsv_dict = {
                 "green": [[0, 0, 0], [255, 255, 255]],
                 "red": [[0, 0, 0], [255, 255, 255]],
@@ -70,7 +68,7 @@ class carVision(Node):
     def camera_callback(self, msg):
         try:
             self.frame = CvBridge().imgmsg_to_cv2(msg, "bgr8")
-            #print("Frame received")
+            print("Frame received")
         except Exception as e:
             self.get_logger().info(str(e))
 
@@ -131,7 +129,7 @@ class carVision(Node):
 
     def getWaypoints(self, show_image=False):
         if self.frame is None:
-            return 999.0
+            return 0.0
 
         h, w, _ = self.frame.shape
         croped_frame = self.frame[h - h // 4:h, w // 4: w - w // 4].copy()
@@ -141,7 +139,7 @@ class carVision(Node):
         #cv2.imshow("Imgray", imgray)
         h, w = imgray.shape
         # Binarize the image if necessary
-        _, binary_image = cv2.threshold(imgray, 100, 255, cv2.THRESH_BINARY)
+        _, binary_image = cv2.threshold(imgray, 90, 255, cv2.THRESH_BINARY)
         binary_image = cv2.bitwise_not(binary_image)
         #cv2.imshow("Binary Image", binary_image)
 
@@ -153,16 +151,15 @@ class carVision(Node):
 
         #track_line = self.getCurvedLine(binary_image)
         track_line = binary_image
+
         
         # Set initial point at the bottom of the image and in the middle
         initial_point = (int(w / 2), h - 1)
 
         # Find contours of the binary image
         contours, _ = cv2.findContours(track_line, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        print(len(contours))
-        if (len(contours) < 1 or len(contours) > 5):
-            if show_image:
-                self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(binary_image, "mono8"))
+
+        if (len(contours) < 1):
             return 999.0
         
         # Get the biggest contour
@@ -179,7 +176,7 @@ class carVision(Node):
             cv2.drawContours(croped_frame, contours, -1, (0,0,255))
             cv2.circle(croped_frame, coords, 1, (255, 255, 0), -1)
             cv2.circle(croped_frame, initial_point, 1, (255, 255, 0), -1)
-            self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(track_line, "mono8"))
+            self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(croped_frame, "bgr8"))
 
         y = initial_point[0] - coords[0]
         x = initial_point[1] - coords[1]
@@ -188,13 +185,10 @@ class carVision(Node):
         return angle
     
     def getColoredCirles(self):
-        print("searching circles")
         if self.frame is None:
             return []
         
         self.frame = cv2.resize(self.frame, (800,400))
-        if DEBUG:
-            cv2.imshow("Original image", self.frame)
         
         detected_outputs = []
         hsvFrame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
@@ -202,109 +196,67 @@ class carVision(Node):
         copy_frame = self.frame.copy()
         
         for color in self.hsv_dict.keys():
-            # print(f"Color mask: {self.hsv_dict[color]}")
             unmasked_image = self.frame.copy()
             lower = self.hsv_dict[color][0]
             upper = self.hsv_dict[color][1]
             mask = cv2.inRange(hsvFrame, lower, upper)
-            binary_image = cv2.bitwise_and(unmasked_image, unmasked_image, mask=mask)
-            # cv2.imshow("Masked image " + str(color), binary_image)
             detected_outputs.append(cv2.bitwise_and(unmasked_image, unmasked_image, mask=mask))
-        
-        
+            
         circles_pts = {}
 
         for detected_output, color in zip(detected_outputs, [DetectionEnumerator.YELLOW_CIRCLE, DetectionEnumerator.RED_CIRCLE, DetectionEnumerator.GREEN_CIRCLE]):
-            # make the frame black and white, binary (all white or all black)
-            detected_output = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
-            _, detected_output = cv2.threshold(detected_output, 30, 255, cv2.THRESH_BINARY)
-            # make three dimensional (rgb)
-            detected_output = cv2.merge((detected_output, detected_output, detected_output))
-            # if DEBUG:
-            #     cv2.imshow("Masked binary image " + str(color), detected_output)
-            #     cv2.waitKey(1)
-                # cv2.destroyAllWindows()
-            # erode and dilate
-            erodeKernel, dilateKernel = np.ones((5,5), np.uint8), np.ones((7,7), np.uint8)
-            detected_output = cv2.erode(detected_output, erodeKernel, iterations=2)
-            detected_output = cv2.dilate(detected_output, dilateKernel, iterations=3)
-            
-            # blur
-            detected_output = cv2.GaussianBlur(detected_output, (9,9), 2)
             if DEBUG:
-                cv2.imshow("Final image " + str(color), detected_output)
+                cv2.imshow("Masked image " + str(color), detected_output)
                 cv2.waitKey(1)
                 # cv2.destroyAllWindows()
-            
-            # circle detection
-            # make the image be of type uin8, either 0 or 255 
-            detected_output = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
-            
-            circles = cv2.HoughCircles(detected_output, cv2.HOUGH_GRADIENT, 1, 100, param1=50, param2=20, minRadius=10, maxRadius=50)
             circles_pts[color] = []
-            if circles is not None and len(circles) > 0:
-                for circle in circles[0, :]:
-                    # cv2.circle(copy_frame, (circle[0], circle[1]), circle[2], (0, 255, 0), 2)
-                    # circles_pts[color] = circle[2]
-                    print(f"FOUND {str(color)} circle")
-                    # draw a cross on the center of the circle
-                    draw_color = (100, 255, 0) if color == DetectionEnumerator.GREEN_CIRCLE else (0, 100, 255) if color == DetectionEnumerator.RED_CIRCLE else (100, 255, 255)
-                    copy_frame = cv2.circle(copy_frame, (int(circle[0]), int(circle[1])), int(circle[2]), draw_color, 2)
-                    circles_pts[color].append(float(circle[2]))
-        if DEBUG:
-            cv2.imshow("Circles image ", copy_frame)
-        #     circles_pts[color] = []
-        #     gray = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
-        #     # blur = cv2.gaussianBlur(gray, 5)
-        #     blur = cv2.GaussianBlur(gray,(9,9),2)
+            gray = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
+            # blur = cv2.gaussianBlur(gray, 5)
+            blur = cv2.GaussianBlur(gray,(9,9),2)
 
-        #     #diialte 
-        #     kernel = np.ones((5,5), np.uint8)
-        #     dilate = cv2.dilate(blur, kernel, iterations=2)
+            #diialte 
+            kernel = np.ones((5,5), np.uint8)
+            dilate = cv2.dilate(blur, kernel, iterations=2)
 
-        #     blur = cv2.GaussianBlur(dilate,(9,9),2)
+            blur = cv2.GaussianBlur(dilate,(9,9),2)
 
-        #     if DEBUG:
-        #         cv2.imshow("Blur image " + str(color), blur)
+            if DEBUG:
+                cv2.imshow("Blur image " + str(color), blur)
 
-        #     # Morph open 
-        #     thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-        #     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
-        #     opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=3)
+            # Morph open 
+            thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
+            opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=3)
 
-        #     # Find contours and filter using contour area and aspect ratio
-        #     cnts = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        #     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
-        #     for c in cnts:
-        #         peri = cv2.arcLength(c, True)
-        #         approx = cv2.approxPolyDP(c, 0.04 * peri, True)
-        #         area = cv2.contourArea(c)
-        #         if len(approx) > 5 and area > 1000 and area < 500000:
-        #             ((x, y), r) = cv2.minEnclosingCircle(c)
-        #             #circle_pts.append((int(x), int(y), int(r)))
-        #             circles_pts[color].append(r)
-        #             if color == DetectionEnumerator.RED_CIRCLE:
-        #                 color_rgb = (0, 0, 255)
-        #             elif color == DetectionEnumerator.GREEN_CIRCLE:
-        #                 color_rgb = (0, 255, 0)
-        #             else:
-        #                 color_rgb = (0, 255, 255)
+            # Find contours and filter using contour area and aspect ratio
+            cnts = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+            for c in cnts:
+                peri = cv2.arcLength(c, True)
+                approx = cv2.approxPolyDP(c, 0.04 * peri, True)
+                area = cv2.contourArea(c)
+                if len(approx) > 5 and area > 1000 and area < 500000:
+                    ((x, y), r) = cv2.minEnclosingCircle(c)
+                    #circle_pts.append((int(x), int(y), int(r)))
+                    circles_pts[color].append(r)
+                    if color == DetectionEnumerator.RED_CIRCLE:
+                        color_rgb = (0, 0, 255)
+                    elif color == DetectionEnumerator.GREEN_CIRCLE:
+                        color_rgb = (0, 255, 0)
+                    else:
+                        color_rgb = (0, 255, 255)
                     
-        #             cv2.circle(copy_frame, (int(x), int(y)), int(r), color_rgb, 2)
+                    cv2.circle(copy_frame, (int(x), int(y)), int(r), color_rgb, 2)
 
-        #     cv2.imshow('Detections', copy_frame)
-        #     self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(copy_frame, "bgr8"))
-        #     print ("Publishing image")    
-        if DEBUG:
-            cv2.waitKey(1)   
-        
-        #self.camera_publisher_colors.publish(CvBridge().cv2_to_imgmsg(copy_frame, "bgr8"))
+            cv2.imshow('Detections', copy_frame)
+            self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(copy_frame, "bgr8"))
+            print ("Publishing image")        
         return circles_pts
 
     def timer_callback(self):
         self.road_publisher.publish(Float32(data=self.getWaypoints(show_image=True)))
+
         return
-        print("timer")
         detection_msg = Detection()
         circle_pts = self.getColoredCirles()
         min_distance = 254
@@ -312,7 +264,7 @@ class carVision(Node):
         useRadius = True
         detected_color = DetectionEnumerator.NO_DETECTION
         # print(circle_pts)
-        if len(circle_pts) > 0: 
+        if len(circle_pts) > 0:
             for color_key in circle_pts.keys():
                 if len(circle_pts[color_key]) < 1:
                     continue
@@ -335,6 +287,7 @@ class carVision(Node):
 
             detection_msg.detection_type = detected_color
         
+        self.road_publisher.publish(Float32(data=self.getWaypoints()))
         self.detection_publisher.publish(detection_msg)
         
 
