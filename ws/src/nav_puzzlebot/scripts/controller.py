@@ -8,6 +8,7 @@ import numpy as np
 import math
 from car_interfaces.msg import Detection, Inference, InferenceArray
 from enum import IntEnum
+import time
 
 USING_POSE = True
 USING_LINE = True
@@ -86,12 +87,6 @@ class Controller(Node):
         self.puntos = []   
         self.TARGET_TOLERANCE = 0.02  
 
-        
-        self.forward_points = [(0.30, 0.0)]
-        self.turn_left_points = [(0.35, 0.0), (0.35, -0.35)]
-        self.turn_right_points = [(0.35, 0.0), (0.35, 0.35)]
-        self.roundabout_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
-
         # Max & min velocities
         self.maxang = 1.25
         self.maxlinear = 0.3
@@ -121,6 +116,54 @@ class Controller(Node):
         
         self.get_logger().info('Controller node successfully initialized!!!')
 
+
+    # Define function to turn left at intersection using linear and angular velocity
+    def turn_left(self):
+        #Advance 15 cm
+        self.msg_vel.linear.x = self.maxlinear * 0.2
+        time_stamp = time.time()
+        while time.time() - time_stamp < 1.5:
+            self.vel_publisher.publish(self.msg_vel)
+
+        #Turn 90 degrees
+        self.msg_vel.linear.x = 0.0
+        self.msg_vel.angular.z = -self.maxang * 0.2
+        time_stamp = time.time()
+        while time.time() - time_stamp < 1.5:
+            self.vel_publisher.publish(self.msg_vel)
+
+        self.msg_vel.angular.z = 0.0
+        self.vel_publisher.publish(self.msg_vel)
+
+    # Define function to turn right at intersection using linear and angular velocity
+    def turn_right(self):
+        #Advance 15 cm
+        self.msg_vel.linear.x = self.maxlinear * 0.2
+        time_stamp = time.time()
+        while time.time() - time_stamp < 1.5:
+            self.vel_publisher.publish(self.msg_vel)
+
+        #Turn 90 degrees
+        self.msg_vel.linear.x = 0.0
+        self.msg_vel.angular.z = self.maxang * 0.2
+        time_stamp = time.time()
+        while time.time() - time_stamp < 1.5:
+            self.vel_publisher.publish(self.msg_vel)
+
+        self.msg_vel.angular.z = 0.0
+        self.vel_publisher.publish(self.msg_vel)
+
+    # Define function to go forward at intersection using linear and angular velocity
+    def go_forward(self):
+        #Advance 15 cm
+        self.msg_vel.linear.x = self.maxlinear * 0.2
+        time_stamp = time.time()
+        while time.time() - time_stamp < 1.5:
+            self.vel_publisher.publish(self.msg_vel)
+
+    # Define function to go roundabout at intersection using linear and angular velocity
+    def go_roundabout(self):
+        pass
 
     # Update left motor angular velocity
     def odom_callback(self, msg):
@@ -282,27 +325,17 @@ class Controller(Node):
                 self.msg_vel.linear.x = self.maxlinear * 0.6
                 self.msg_vel.angular.z = 0.0
         elif self.robot_state == States.INFERENCE:
-            if len(self.puntos) == 0:
-                if self.inference.class_id == self.inference.FORWARD:
-                    self.puntos = self.forward_points.copy()
-                elif self.inference.class_id == self.inference.TURN_LEFT:
-                    self.puntos = self.turn_left_points.copy()
-                elif self.inference.class_id == self.inference.TURN_RIGHT:
-                    self.puntos = self.turn_right_points.copy()
-                elif self.inference.class_id == self.inference.ROUNDABOUT:
-                    self.puntos = self.roundabout_points.copy()
+            if self.inference.class_id == self.inference.FORWARD:
+                self.go_forward()
+            elif self.inference.class_id == self.inference.TURN_LEFT:
+                self.turn_left()
+            elif self.inference.class_id == self.inference.TURN_RIGHT:
+                self.turn_right()
+            elif self.inference.class_id == self.inference.ROUNDABOUT:
+                self.go_roundabout()
 
-                for i in range(len(self.puntos)):
-                    self.puntos[i] = (self.puntos[i][0] + self.x, self.puntos[i][1] + self.y)
-
-                self.puntos.append(self.puntos[-1])
-
-
-            self.msg_vel.linear.x, self.msg_vel.angular.z = self.getVelocity()  
-              
-            if (len(self.puntos) == 0):
-                self.robot_state = States.FOLLOW_LINE
-                self.intersection_flag = False
+            self.robot_state = States.FOLLOW_LINE
+            self.intersection_flag = False
         elif self.robot_state == States.STOP:
             self.msg_vel.linear.x = 0.0
             self.msg_vel.angular.z = 0.0
