@@ -47,7 +47,7 @@ class Controller(Node):
         # Robot constants
         self.Kv = 0.25 # proportional linear velocity constant
         self.Kw = 0.25 # proportional angular velocity constant
-        self.KwL = 0.000004 # proportional angular velocity constant
+        self.KwL = 0.000001 # proportional angular velocity constant
         self.KdwL = 0.0
 
         # Velocity publisherself.msg_vel = Twist() # velocity message
@@ -89,8 +89,8 @@ class Controller(Node):
 
         
         self.forward_points = [(0.30, 0.0)]
-        self.turn_left_points = [(0.35, 0.0), (0.30, 0.20)]
-        self.turn_right_points = [(0.35, 0.0), (0.30, -0.20)]
+        self.turn_left_points = [(0.35, 0.0), (0.35, 0.10)]
+        self.turn_right_points = [(0.35, 0.0), (0.38, -0.10)]
         self.roundabout_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
 
         # Max & min velocities
@@ -142,12 +142,12 @@ class Controller(Node):
             return
 
         #First, let robot turn until self.error_ang_line is diminutive
-        if (abs(self.error_ang_line) >= 1.0):
-            w = self.KwL * self.error_ang_line + self.KdwL * (self.error_ang_line - self.lasterror_ang) * self.vel_period 
+        if (abs(self.error_ang_line) >= 70.0):
+            w = self.KwL * self.error_ang_line # + self.KdwL * (self.error_ang_line - self.lasterror_ang) * self.vel_period 
         else:
             w = 0.0
 
-        v = self.maxlinear * 0.3
+        v = self.maxlinear * 0.2
         self.lasterror_ang = self.error_ang_line
         if abs(v) > self.maxlinear:
             v = (abs(v) / v) * self.maxlinear
@@ -299,7 +299,7 @@ class Controller(Node):
                     print("LEFT")
                     self.puntos = self.turn_right_points.copy()
                 elif self.inference.class_id == self.inference.ROUNDABOUT:
-                    self.puntos = self.roundabout_points.copy()
+                    self.puntos = self.turn_right_points.copy()
                 elif self.inference.class_id == self.inference.STOP:
                     self.robot_state = States.STOP
                     return

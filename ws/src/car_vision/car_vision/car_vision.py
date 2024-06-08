@@ -137,7 +137,7 @@ class carVision(Node):
             return 999.0
 
         h, w, _ = self.frame.shape
-        croped_frame = self.frame[h - h // 4:h, w // 5: w - w // 5].copy()
+        croped_frame = self.frame[h - h // 5:h, w // 4: w - w // 4].copy()
         h, w, _ = croped_frame.shape
         # Convert the image to grayscale
         imgray = cv2.cvtColor(croped_frame, cv2.COLOR_BGR2GRAY)
@@ -166,7 +166,8 @@ class carVision(Node):
         if (len(contours) < 1 or len(contours) > 5):
             print("INTERSECTION")
             if show_image:
-                self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(binary_image, "mono8"))
+                #self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(binary_image, "mono8"))
+                self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(croped_frame, "bgr8"))
             return 999.0
         
         # Get the biggest contour
@@ -183,7 +184,8 @@ class carVision(Node):
             cv2.drawContours(croped_frame, contours, -1, (0,0,255))
             cv2.circle(croped_frame, coords, 1, (255, 255, 0), -1)
             cv2.circle(croped_frame, initial_point, 1, (255, 255, 0), -1)
-            self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(track_line, "mono8"))
+            #self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(track_line, "mono8"))
+            self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(croped_frame, "bgr8"))
 
         y = initial_point[0] - coords[0]
         x = initial_point[1] - coords[1]
