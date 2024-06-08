@@ -47,8 +47,8 @@ class Controller(Node):
         # Robot constants
         self.Kv = 0.25 # proportional linear velocity constant
         self.Kw = 0.25 # proportional angular velocity constant
-        self.KwL = 0.00008 # proportional angular velocity constant
-        self.KdwL = 0.05
+        self.KwL = 0.000004 # proportional angular velocity constant
+        self.KdwL = 0.0
 
         # Velocity publisherself.msg_vel = Twist() # velocity message
         self.vel_period = 0.01 # velocity publishing period (seconds)
@@ -70,6 +70,7 @@ class Controller(Node):
         self.theta = 0.0
         self.x = 0.0
         self.y = 0.0
+        self.odom_flag = False
 
         # Flags when angVelocity and Linear Velocity end
         self.vfinish = True
@@ -88,8 +89,8 @@ class Controller(Node):
 
         
         self.forward_points = [(0.30, 0.0)]
-        self.turn_left_points = [(0.35, 0.0), (0.35, -0.35)]
-        self.turn_right_points = [(0.35, 0.0), (0.35, 0.35)]
+        self.turn_left_points = [(0.35, 0.0), (0.30, 0.20)]
+        self.turn_right_points = [(0.35, 0.0), (0.30, -0.20)]
         self.roundabout_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
 
         # Max & min velocities
@@ -124,9 +125,10 @@ class Controller(Node):
 
     # Update left motor angular velocity
     def odom_callback(self, msg):
+        self.odom_flag = True
         self.theta = msg.theta
-        self.x = msg.x * math.cos(self.theta)
-        self.y = msg.y * math.sin(self.theta)
+        self.x = msg.x
+        self.y = msg.y
         #self.get_logger().info('Odom: {}'.format(msg))
     
     # Line follower callback
@@ -140,7 +142,7 @@ class Controller(Node):
             return
 
         #First, let robot turn until self.error_ang_line is diminutive
-        if (abs(self.error_ang_line) >= 5.0):
+        if (abs(self.error_ang_line) >= 1.0):
             w = self.KwL * self.error_ang_line + self.KdwL * (self.error_ang_line - self.lasterror_ang) * self.vel_period 
         else:
             w = 0.0
@@ -173,6 +175,9 @@ class Controller(Node):
                 self.xT, self.yT = self.puntos.pop(0)
             else:
                 return 0.0, 0.0
+
+            # print(self.xT, se lf.yT)
+            # print(self.x, sel f.y)
         
         print(self.xT, self.yT)
         print(self.x, self.y)
@@ -191,9 +196,10 @@ class Controller(Node):
 
         if(abs(errorIzq) < abs(errorDer)): self.error_ang = errorIzq
         else: self.error_ang = errorDer
-        
+
+        print(self.error_ang)
         #First, let robot turn until self.error_ang is diminutive
-        if (abs(self.error_ang) >= 0.05):
+        if (abs(self.error_ang) >= 0.1):
             w = self.Kw * self.error_ang
         else:
             w = 0.0
@@ -201,7 +207,7 @@ class Controller(Node):
 
         #If robot turn is finish, let robot have linear velocity
         if self.afinish:
-            if self.error_d > 0.05 : 
+            if self.error_d > 0.01 : 
                 v = self.Kv * self.error_d
             else: 
                 self.vfinish = True
@@ -227,7 +233,7 @@ class Controller(Node):
         # Iterate through InferenceArray msg
         self.inference_list = []
         for i in range(len(msg.detections)):
-            self.get_logger().info('Inference: {}'.format(msg.detections[i].class_id))
+            #self.get_logger().info('Inference: {}'.format(msg.detections[i].class_id))
             if(msg.detections[i].class_id not in [msg.detections[i].FORWARD, msg.detections[i].TURN_LEFT, msg.detections[i].TURN_RIGHT, msg.detections[i].ROUNDABOUT, msg.detections[i].STOP]):
                 self.inference_list.append(msg.detections[i])
             else:
@@ -242,14 +248,11 @@ class Controller(Node):
         if len(self.inference_list) > 0:
             while len(self.inference_list) > 0:
                 inference = self.inference_list.pop()
-                self.get_logger().info('Inference: {}'.format(inference.class_id))
+                #self.get_logger().info('Inference: {}'.format(inference.class_id))
                 if(inference.class_id == inference.GIVEAWAY):
                     self.velocity_multiplier = 0.5
                 elif(inference.class_id == inference.ROADWORK):
                     self.velocity_multiplier = 0.5
-                elif(inference.class_id == inference.STOP and inference.confidence > 0.9):
-                    self.velocity_multiplier = 0.0
-                    self.robot_state = States.STOP
         else: 
             self.velocity_multiplier = 1.0
         
@@ -266,7 +269,7 @@ class Controller(Node):
 
     # Odometry callback
     def state_machine(self):
-        self.get_logger().info('State: {}'.format(self.robot_state))
+        # self.get_logger().info('State: {}'.format(self.robot_state))
         if self.robot_state == States.IDLE:
             self.msg_vel.linear.x = 0.0
             self.msg_vel.angular.z = 0.0
@@ -282,12 +285,18 @@ class Controller(Node):
                 self.msg_vel.linear.x = self.maxlinear * 0.6
                 self.msg_vel.angular.z = 0.0
         elif self.robot_state == States.INFERENCE:
+            if not self.odom_flag: 
+                return 
+
             if len(self.puntos) == 0:
+                print(self.inference.class_id)
                 if self.inference.class_id == self.inference.FORWARD:
                     self.puntos = self.forward_points.copy()
-                elif self.inference.class_id == self.inference.TURN_LEFT:
-                    self.puntos = self.turn_left_points.copy()
                 elif self.inference.class_id == self.inference.TURN_RIGHT:
+                    print("RIGHT")
+                    self.puntos = self.turn_left_points.copy()
+                elif self.inference.class_id == self.inference.TURN_LEFT:
+                    print("LEFT")
                     self.puntos = self.turn_right_points.copy()
                 elif self.inference.class_id == self.inference.ROUNDABOUT:
                     self.puntos = self.roundabout_points.copy()
@@ -296,9 +305,13 @@ class Controller(Node):
                     return
 
                 for i in range(len(self.puntos)):
-                    self.puntos[i] = (self.puntos[i][0] + self.x, self.puntos[i][1] + self.y)
+                    self.puntos[i] = ((self.puntos[i][0] * math.cos(self.theta) - self.puntos[i][1] * math.sin(self.theta)) + self.x, (self.puntos[i][0] * math.sin(self.theta) + self.puntos[i][1] * math.cos(self.theta)) + self.y)
 
                 self.puntos.append(self.puntos[-1])
+
+                print(self.x, self.y, self.theta)
+
+                print(self.puntos)
 
 
             self.msg_vel.linear.x, self.msg_vel.angular.z = self.getVelocity()  

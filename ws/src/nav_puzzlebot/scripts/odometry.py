@@ -45,7 +45,7 @@ class Odometry(Node):
         # Robot constants
         self.r = 0.05 # wheel radius (meters)
         self.l = 0.19 # distance between wheels (meters)
-        self.ang_const = self.r / self.l # angular constant for theta calculation
+        self.ang_const = self.r / (self.l) # angular constant for theta calculation
         self.lin_const = self.r / 2 # linear constant for x and y calculation
         self.dt = self.odom_period # time between samples (seconds)
 

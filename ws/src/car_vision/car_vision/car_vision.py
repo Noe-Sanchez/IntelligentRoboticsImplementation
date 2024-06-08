@@ -10,7 +10,7 @@ from cv_bridge import CvBridge
 
 from car_interfaces.msg import Detection
 from std_msgs.msg import Float32
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CompressedImage
 
 import json
 
@@ -41,7 +41,8 @@ class carVision(Node):
 
         self.camera_publisher = self.create_publisher(Image, '/image_detections', 10)
         #self.camera_publisher_colors = self.create_publisher(Image, '/image_detections_colors', 10)
-        self.camera_subcriber = self.create_subscription(Image, '/video_source/raw', self.camera_callback, 10)
+        self.comp_sub = self.create_subscription(CompressedImage, '/video_source/compressed', self.camera_callback, 10)
+        # self.camera_subcriber = self.create_subscription(Image, '/video_source/raw', self.camera_callback, 10)
 
         time_interval = 0.1 # seconds
         self.timer = self.create_timer(time_interval, self.timer_callback)
@@ -69,7 +70,9 @@ class carVision(Node):
 
     def camera_callback(self, msg):
         try:
-            self.frame = CvBridge().imgmsg_to_cv2(msg, "bgr8")
+            np_arr = np.frombuffer(msg.data, np.uint8)
+            self.frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            
             #print("Frame received")
         except Exception as e:
             self.get_logger().info(str(e))
@@ -134,7 +137,7 @@ class carVision(Node):
             return 999.0
 
         h, w, _ = self.frame.shape
-        croped_frame = self.frame[h - h // 4:h, w // 4: w - w // 4].copy()
+        croped_frame = self.frame[h - h // 4:h, w // 5: w - w // 5].copy()
         h, w, _ = croped_frame.shape
         # Convert the image to grayscale
         imgray = cv2.cvtColor(croped_frame, cv2.COLOR_BGR2GRAY)
@@ -146,9 +149,9 @@ class carVision(Node):
         #cv2.imshow("Binary Image", binary_image)
 
         kernel = np.ones((2,2), np.uint8)
-        binary_image = cv2.erode(binary_image, kernel, iterations=1)
+        binary_image = cv2.erode(binary_image, kernel, iterations=4)
 
-        binary_image = cv2.dilate(binary_image, kernel, iterations=1)
+        binary_image = cv2.dilate(binary_image, kernel, iterations=2)
         
 
         #track_line = self.getCurvedLine(binary_image)
@@ -159,8 +162,9 @@ class carVision(Node):
 
         # Find contours of the binary image
         contours, _ = cv2.findContours(track_line, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        print(len(contours))
+        #print(len(contours))
         if (len(contours) < 1 or len(contours) > 5):
+            print("INTERSECTION")
             if show_image:
                 self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(binary_image, "mono8"))
             return 999.0
