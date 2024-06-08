@@ -8,7 +8,7 @@ from rclpy.node import Node
 from cv_bridge import CvBridge
 
 from car_interfaces.msg import Inference, InferenceArray
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CompressedImage
 
 import cv2
 
@@ -21,7 +21,8 @@ class carInference(Node):
         super().__init__('car_inference')
         self.model = ultralytics.YOLO(f'{BASE_PATH}/yolov8n_custom/weights/best.pt')
         self.bridge = CvBridge()
-        self.image_sub = self.create_subscription(Image, '/video_source/raw', self.image_callback, 10)
+        # self.image_sub = self.create_subscription(Image, '/video_source/raw', self.image_callback, 10)
+        self.comp_sub = self.create_subscription(CompressedImage, 'comp_img', self.image_callback, 10)
         self.visualization_pub = self.create_publisher(Image, 'carInferenceVisualization', 10)
         self.detection_pub = self.create_publisher(InferenceArray, 'carInferences', 10)
         self.prevtime = time.time()
@@ -31,7 +32,9 @@ class carInference(Node):
         self.yolov8_warmup(10, False)
 
     def image_callback(self, msg):
-        frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+        np_arr = np.frombuffer(msg.data, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        # frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
         results = self.model(frame, verbose=False)
         boxes, confidences, classids = self.generate_boxes_confidences_classids_v8(results)
 
