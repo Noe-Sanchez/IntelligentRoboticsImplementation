@@ -4,6 +4,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from geometry_msgs.msg import Pose2D
 from std_msgs.msg import Float32
+from std_srvs.srv import Empty
 import numpy as np
 
 # Odometry node
@@ -24,6 +25,8 @@ class Odometry(Node):
         self.wL_subscriber = self.create_subscription(Float32, 'VelocityEncL', self.wL_callback, qos_profile=qos_profile_sub) # wL topic subscriber
         self.wR_subscriber = self.create_subscription(Float32, 'VelocityEncR', self.wR_callback, qos_profile=qos_profile_sub) # wR topic subscriber
 
+        # Odometry reset
+        self.odom_reset_srv = self.create_service(Empty, 'reset_odom', self.reset_odom_callback) # odometry reset service
         # Odometry publisher
         self.odom_publisher = self.create_publisher(Pose2D, 'odom', qos_profile=qos_profile_sub) # odometry topic publisher
         self.odom_period = 0.05 # odometry publishing period (seconds)
@@ -96,6 +99,10 @@ class Odometry(Node):
     def wR_callback(self, msg):
         self.wR = msg.data
         #Sself.get_logger().info('OmegaR: {}'.format(msg.data))
+        
+    def reset_odom_callback(self, request, response):
+        self.variablesInit()
+        return response
 
 # Run node
 def main(args=None):

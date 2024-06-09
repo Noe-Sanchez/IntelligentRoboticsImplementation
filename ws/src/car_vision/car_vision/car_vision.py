@@ -3,7 +3,7 @@ import numpy as np
 import threading
 import pathlib
 from enum import IntEnum
-
+import time
 import rclpy
 from rclpy.node import Node
 from cv_bridge import CvBridge
@@ -36,19 +36,28 @@ class DetectionEnumerator(IntEnum):
 class carVision(Node):
     def __init__(self):
         super().__init__("car_vision_publisher")
-        self.detection_publisher = self.create_publisher(Detection, '/carDetections', 10)
+        # self.detection_publisher = self.create_publisher(Detection, '/carDetections', 10)
+        self.angle = 0.0
+        self.intersection_count = 0
+        self.intersection_limit = 3
+        
         self.road_publisher = self.create_publisher(Float32, '/roadError', 10)
 
         self.camera_publisher = self.create_publisher(Image, '/image_detections', 10)
+        self.circles_image_publisher = self.create_publisher(Image, '/image_circles', 10)
         #self.camera_publisher_colors = self.create_publisher(Image, '/image_detections_colors', 10)
         self.comp_sub = self.create_subscription(CompressedImage, '/video_source/compressed', self.camera_callback, 10)
         # self.camera_subcriber = self.create_subscription(Image, '/video_source/raw', self.camera_callback, 10)
-
+        self.last_time = time.time()
+        self.last_time_circles = time.time()
         time_interval = 0.1 # seconds
+        circles_time_interval = 0.25
         self.timer = self.create_timer(time_interval, self.timer_callback)
-        
+        # self.circles_timer = self.create_timer(circles_time_interval, self.circles_timer_callback)
+        #self.circles_image_publisher = self.create_publisher(Image, '/image_circles', 10)
         self.frame = None  
         self.directions = [1,0,-1,0,1]
+        
 
         # self.retrieve_camera_info()
 
@@ -112,7 +121,7 @@ class carVision(Node):
         scale = 0.2
 
         y1 = int(height - (height * scale))
-        x_diff = int((width * scale) / 2)
+        x_diff = int((width * scale) * 0.6)
 
         crop_img = threshed_image[y1:height, x_diff:width - x_diff]
 
@@ -132,9 +141,10 @@ class carVision(Node):
 
         return new_image
 
-    def getWaypoints(self, show_image=False):
+    def getWaypoints(self, show_image=True):
         if self.frame is None:
-            return 999.0
+            print("Frame is None")
+            return 998.0
 
         h, w, _ = self.frame.shape
         croped_frame = self.frame[h - h // 5:h, w // 4: w - w // 4].copy()
@@ -150,8 +160,9 @@ class carVision(Node):
 
         kernel = np.ones((2,2), np.uint8)
         binary_image = cv2.erode(binary_image, kernel, iterations=4)
-
-        binary_image = cv2.dilate(binary_image, kernel, iterations=2)
+        
+        KERNEL = np.ones((5,5), np.uint8)
+        binary_image = cv2.dilate(binary_image, kernel, iterations=3)
         
 
         #track_line = self.getCurvedLine(binary_image)
@@ -168,7 +179,15 @@ class carVision(Node):
             if show_image:
                 #self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(binary_image, "mono8"))
                 self.camera_publisher.publish(CvBridge().cv2_to_imgmsg(croped_frame, "bgr8"))
-            return 999.0
+            self.intersection_count+=1
+            if self.intersection_count > self.intersection_limit:
+                return 999.0
+            else:
+                return 0.0
+        elif len(contours) >= 2:
+            return 0.0
+        
+        self.intersection_count = 0
         
         # Get the biggest contour
         centerline_contour = max(contours, key=cv2.contourArea)
@@ -189,9 +208,10 @@ class carVision(Node):
 
         y = initial_point[0] - coords[0]
         x = initial_point[1] - coords[1]
-        angle = np.degrees(np.arctan2(y, x))
+        self.angle = np.degrees(np.arctan2(y, x))
+        print(self.angle)
 
-        return angle
+        return self.angle
     
     def getColoredCirles(self):
         print("searching circles")
@@ -206,7 +226,7 @@ class carVision(Node):
         hsvFrame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2HSV)
 
         copy_frame = self.frame.copy()
-        
+        published_image = np.zeros((self.frame.shape[0], self.frame.shape[1], 3), np.uint8) 
         for color in self.hsv_dict.keys():
             # print(f"Color mask: {self.hsv_dict[color]}")
             unmasked_image = self.frame.copy()
@@ -216,19 +236,39 @@ class carVision(Node):
             binary_image = cv2.bitwise_and(unmasked_image, unmasked_image, mask=mask)
             # cv2.imshow("Masked image " + str(color), binary_image)
             detected_outputs.append(cv2.bitwise_and(unmasked_image, unmasked_image, mask=mask))
+            published_image = cv2.add(published_image, binary_image)
         
         
         circles_pts = {}
+        
+        
 
         for detected_output, color in zip(detected_outputs, [DetectionEnumerator.YELLOW_CIRCLE, DetectionEnumerator.RED_CIRCLE, DetectionEnumerator.GREEN_CIRCLE]):
             # make the frame black and white, binary (all white or all black)
             detected_output = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
             _, detected_output = cv2.threshold(detected_output, 30, 255, cv2.THRESH_BINARY)
+            
+            # append to the black image to publish the binary image, coloured according to the color
+            # if color == DetectionEnumerator.RED_CIRCLE:
+            #     mask = np.zeros((detected_output.shape[0], detected_output.shape[1], 3), np.uint8)
+            #     mask[:,:] = [0, 0, 255]
+            #     mask_filtered = cv2.bitwise_and(mask, mask, mask=detected_output)
+            #     published_image = cv2.add(published_image, mask_filtered)
+            # elif color == DetectionEnumerator.GREEN_CIRCLE:
+            #     mask = np.zeros((detected_output.shape[0], detected_output.shape[1], 3), np.uint8)
+            #     mask[:,:] = [0, 255, 0]
+            #     mask_filtered = cv2.bitwise_and(mask, mask, mask=detected_output)
+            #     published_image = cv2.add(published_image, mask_filtered)
+            # else:
+            #     mask = np.zeros((detected_output.shape[0], detected_output.shape[1], 3), np.uint8)
+            #     mask[:,:] = [0, 255, 255]
+            #     mask_filtered = cv2.bitwise_and(mask, mask, mask=detected_output)
+            #     published_image = cv2.add(published_image, mask_filtered)
             # make three dimensional (rgb)
             detected_output = cv2.merge((detected_output, detected_output, detected_output))
             # if DEBUG:
-            #     cv2.imshow("Masked binary image " + str(color), detected_output)
-            #     cv2.waitKey(1)
+            # cv2.imshow("Masked binary image " + str(color), detected_output)
+            # cv2.waitKey(1)
                 # cv2.destroyAllWindows()
             # erode and dilate
             erodeKernel, dilateKernel = np.ones((5,5), np.uint8), np.ones((7,7), np.uint8)
@@ -244,8 +284,10 @@ class carVision(Node):
             
             # circle detection
             # make the image be of type uin8, either 0 or 255 
-            detected_output = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
             
+            
+            
+            detected_output = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
             circles = cv2.HoughCircles(detected_output, cv2.HOUGH_GRADIENT, 1, 100, param1=50, param2=20, minRadius=10, maxRadius=50)
             circles_pts[color] = []
             if circles is not None and len(circles) > 0:
@@ -254,11 +296,14 @@ class carVision(Node):
                     # circles_pts[color] = circle[2]
                     print(f"FOUND {str(color)} circle")
                     # draw a cross on the center of the circle
-                    draw_color = (100, 255, 0) if color == DetectionEnumerator.GREEN_CIRCLE else (0, 100, 255) if color == DetectionEnumerator.RED_CIRCLE else (100, 255, 255)
-                    copy_frame = cv2.circle(copy_frame, (int(circle[0]), int(circle[1])), int(circle[2]), draw_color, 2)
-                    circles_pts[color].append(float(circle[2]))
+                    if DEBUG:
+                        draw_color = (100, 255, 0) if color == DetectionEnumerator.GREEN_CIRCLE else (0, 100, 255) if color == DetectionEnumerator.RED_CIRCLE else (100, 255, 255)
+                        copy_frame = cv2.circle(copy_frame, (int(circle[0]), int(circle[1])), int(circle[2]), draw_color, 2)
+                        circles_pts[color].append(float(circle[2]))
         if DEBUG:
             cv2.imshow("Circles image ", copy_frame)
+        
+        self.circles_image_publisher.publish(CvBridge().cv2_to_imgmsg(published_image, "bgr8"))
         #     circles_pts[color] = []
         #     gray = cv2.cvtColor(detected_output, cv2.COLOR_BGR2GRAY)
         #     # blur = cv2.gaussianBlur(gray, 5)
@@ -308,11 +353,22 @@ class carVision(Node):
         return circles_pts
 
     def timer_callback(self):
+        time_elapsed = time.time()-self.last_time
+        print(f"[LINE] Time since last run: {time_elapsed}")
+        if time_elapsed > 0.3:
+            print("[WARNING] >>>>>>>>>>>>>DETECTIONS TAKING TOO LONG<<<<<<<<<<<")
+        self.last_time = time.time()
         self.road_publisher.publish(Float32(data=self.getWaypoints(show_image=True)))
         return
-        print("timer")
+    
+    def circles_timer_callback(self):
+        print(f"[CIRCLES] Time since last run: {time.time()-self.last_time_circles}")
+        self.last_time_circles = time.time()
+        
         detection_msg = Detection()
+        start_time = time.time()
         circle_pts = self.getColoredCirles()
+        print(f"Circle finding took: {time.time()-start_time}")
         min_distance = 254
         max_radius = -1
         useRadius = True
