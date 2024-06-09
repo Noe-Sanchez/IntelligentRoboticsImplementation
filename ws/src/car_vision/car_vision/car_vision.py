@@ -39,7 +39,7 @@ class carVision(Node):
         # self.detection_publisher = self.create_publisher(Detection, '/carDetections', 10)
         self.angle = 0.0
         self.intersection_count = 0
-        self.intersection_limit = 3
+        self.intersection_limit = 2
         
         self.road_publisher = self.create_publisher(Float32, '/roadError', 10)
 
@@ -121,7 +121,7 @@ class carVision(Node):
         scale = 0.2
 
         y1 = int(height - (height * scale))
-        x_diff = int((width * scale) * 0.6)
+        x_diff = int((width * scale) * 0.75)
 
         crop_img = threshed_image[y1:height, x_diff:width - x_diff]
 

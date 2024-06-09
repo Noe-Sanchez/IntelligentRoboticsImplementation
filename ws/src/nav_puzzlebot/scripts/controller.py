@@ -94,7 +94,7 @@ class Controller(Node):
         self.TARGET_TOLERANCE = 0.02  
 
         
-        self.forward_points = [(0.30, 0.0)]
+        self.forward_points = [(0.15, 0.0), (0.35, 0.0), (0.55, 0.0)]
         self.turn_left_points = [(0.25, 0.0), (0.25, 0.1)]
         self.turn_right_points = [(0.27, 0.0), (0.27, -0.1)]
         self.roundabout_points = [(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)]
@@ -220,7 +220,7 @@ class Controller(Node):
 
         print(f"Waypoint error ang: {self.error_ang}")
         #First, let robot turn until self.error_ang is diminutive
-        if (abs(self.error_ang) >= 0.15):
+        if (abs(self.error_ang) >= 0.05):
             w = self.Kw * self.error_ang
         else:
             w = 0.0
@@ -259,6 +259,7 @@ class Controller(Node):
             #self.get_logger().info('Inference: {}'.format(msg.detections[i].class_id))
             if(msg.detections[i].class_id not in [msg.detections[i].FORWARD, msg.detections[i].TURN_LEFT, msg.detections[i].TURN_RIGHT, msg.detections[i].ROUNDABOUT, msg.detections[i].STOP]):
                 self.inference_list.append(msg.detections[i])
+                self.last_inference_time = time.time()
             else:
                 if (self.intersection_flag):
                     self.robot_state = States.INFERENCE
@@ -278,11 +279,10 @@ class Controller(Node):
                 inference = self.inference_list.pop()
                 #self.get_logger().info('Inference: {}'.format(inference.class_id))
                 if(inference.class_id == inference.GIVEAWAY):
-                    self.velocity_multiplier = 0.2
+                    self.velocity_multiplier = 0.6
                 elif(inference.class_id == inference.ROADWORK):
-                    self.velocity_multiplier = 0.2
-        else: 
-            self.velocity_multiplier = 1.0
+                    self.velocity_multiplier = 0.6
+        
         
 
         if(self.detection.detection_type == self.detection.GREEN_CIRCLE):
@@ -311,6 +311,7 @@ class Controller(Node):
         if (time.time()-self.last_inference_time > self.inference_timeout):
             # print(">>>>>>>>RESET INFERENCE")
             self.inference = Inference()
+            self.velocity_multiplier = 1.0
         
         # self.get_logger().info('State: {}'.format(self.robot_state))
         if self.robot_state == States.IDLE:
@@ -380,6 +381,8 @@ class Controller(Node):
 
 
         self.get_vel_multipler()
+        
+        print(f"Velocity multiplier: {self.velocity_multiplier}")
         
         self.msg_vel.linear.x *= self.velocity_multiplier
         self.msg_vel.angular.z *= self.velocity_multiplier
