@@ -72,6 +72,10 @@ class carInference(Node):
 
         self.yolov8_warmup(10, False)
 
+        # Print all labels and their corresponding class ids
+        print (self.model.names)
+
+
     def image_callback(self, msg):
         print(f"Image received with time {self.prev_time - time.time()}")
         self.prev_time = time.time()
@@ -105,7 +109,7 @@ class carInference(Node):
         # publish visualization
         self.visualization_pub.publish(self.bridge.cv2_to_imgmsg(frame, 'bgr8'))
         inferenceArrayMsg.detections = inferenceArray
-
+        print(inferenceArray)
         self.detection_pub.publish(inferenceArrayMsg)
     
     def yolov8_warmup(self, repetitions=1, verbose = False):
