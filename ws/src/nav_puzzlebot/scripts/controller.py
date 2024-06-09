@@ -254,6 +254,7 @@ class Controller(Node):
     def getInferences(self, msg):
         # Iterate through InferenceArray msg
         self.inference_list = []
+        largest_detection_size = 0
         for i in range(len(msg.detections)):
             #self.get_logger().info('Inference: {}'.format(msg.detections[i].class_id))
             if(msg.detections[i].class_id not in [msg.detections[i].FORWARD, msg.detections[i].TURN_LEFT, msg.detections[i].TURN_RIGHT, msg.detections[i].ROUNDABOUT, msg.detections[i].STOP]):
@@ -262,7 +263,11 @@ class Controller(Node):
                 if (self.intersection_flag):
                     self.robot_state = States.INFERENCE
                 self.last_inference_time = time.time()
-                self.inference = msg.detections[i]
+                x, y, w, h = msg.detections[i].bbox
+                area = w * h
+                if area > largest_detection_size:
+                    largest_detection_size = area
+                    self.inference = msg.detections[i]
                 break
 
     #Velocity multiplier callback
